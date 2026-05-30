@@ -9,7 +9,11 @@ export function buildSystemPrompt(workspace: WorkspaceState): string {
     ? 'casual, conversational, approachable'
     : workspace.tone === 'bold'
     ? 'bold, confident, provocative'
-    : 'witty, clever, humorous';
+    : workspace.tone === 'witty'
+    ? 'witty, clever, humorous'
+    : workspace.tone === 'empathetic'
+    ? 'empathetic, understanding, supportive'
+    : 'technical, precise, data-driven';
 
   const formatRules: Record<string, string> = {
     post: 'Single X post. Max 280 characters. Punchy, self-contained.',
@@ -27,15 +31,15 @@ export function buildSystemPrompt(workspace: WorkspaceState): string {
 
   const jsonExample = [
     BT + 'json',
-    {
-      "viralScore": <0-100, based on curiosity gap + benefit clarity + emotional trigger>,
-      "hookStrength": <0-100, based on first-line arrest + information withholding>,
-      "readability": <0-100, based on sentence length variation + whitespace usage>,
-      "emotionalPull": <0-100, based on FOMO + inspiration + paradigm-shift potential>,
-      "storyScore": <0-100, based on narrative coherence + pacing + payoff>,
-      "emotionalArc": <0-100, based on tension build + release + emotional journey>,
-      "retention": <0-100, based on scroll-stop power + re-read value + shareability>
-    }
+    '{',
+    '  "viralScore": 0-100, // based on curiosity gap + benefit clarity + emotional trigger',
+    '  "hookStrength": 0-100, // based on first-line arrest + information withholding',
+    '  "readability": 0-100, // based on sentence length variation + whitespace usage',
+    '  "emotionalPull": 0-100, // based on FOMO + inspiration + paradigm-shift potential',
+    '  "storyScore": 0-100, // based on narrative coherence + pacing + payoff',
+    '  "emotionalArc": 0-100, // based on tension build + release + emotional journey',
+    '  "retention": 0-100, // based on scroll-stop power + re-read value + shareability',
+    '}',
     BT,
   ].join('\n');
 
@@ -71,6 +75,8 @@ export function buildSystemPrompt(workspace: WorkspaceState): string {
     workspace.tone === 'witty' ? '- Inject dry humor, unexpected comparisons, clever callbacks.' : '',
     workspace.tone === 'bold' ? '- Challenge assumptions. Take contrarian positions. Make people stop scrolling.' : '',
     workspace.tone === 'professional' ? '- Maintain authority and polish. Use precise language and structured arguments.' : '',
+    workspace.tone === 'empathetic' ? '- Lead with understanding. Validate the reader. Speak to their pain points.' : '',
+    workspace.tone === 'technical' ? '- Include specific numbers, tool names, technical details, code snippets.' : '',
     '',
     '## POST STRUCTURE',
     '- Hook (1-2 lines) → shocking fact or POV',

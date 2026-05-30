@@ -22,7 +22,7 @@ export interface WorkspaceState {
   platform: 'twitter' | 'linkedin' | 'instagram' | 'tiktok' | 'newsletter';
   format: 'post' | 'thread' | 'article' | 'reply' | 'hook';
   length: 'short' | 'medium' | 'long';
-  tone: 'professional' | 'casual' | 'bold' | 'witty';
+  tone: 'professional' | 'casual' | 'bold' | 'witty' | 'empathetic' | 'technical';
 }
 
 export interface ChatRequest {

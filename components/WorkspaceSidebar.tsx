@@ -192,7 +192,7 @@ export default function WorkspaceSidebar({
             TONE ENGINE
           </div>
           <div className="grid grid-cols-2 gap-2">
-            {(['professional', 'casual', 'bold', 'witty'] as const).map(tone => (
+            {(['professional', 'casual', 'bold', 'witty', 'empathetic', 'technical'] as const).map(tone => (
               <button
                 key={tone}
                 onClick={() => updateWorkspace({ tone })}
