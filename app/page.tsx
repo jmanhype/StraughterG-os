@@ -13,11 +13,14 @@ const DEFAULT_WORKSPACE: WorkspaceState = {
   format: 'post',
   length: 'medium',
   tone: {
-    casual: 75,
+    professional: 40,
+    casual: 60,
+    bold: 50,
     witty: 50,
-    provocative: 60,
-    technical: 40,
+    empathetic: 40,
+    technical: 60,
   },
+  formalCasual: 65,
 };
 
 export default function Home() {
@@ -108,6 +111,7 @@ export default function Home() {
           messages={messages}
           isLoading={isLoading}
           onSendMessage={sendMessage}
+          onAction={handleAction}
         />
         <WorkspaceSidebar
           workspace={workspace}

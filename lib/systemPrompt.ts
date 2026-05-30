@@ -27,12 +27,15 @@ export function buildSystemPrompt(workspace: WorkspaceState): string {
 
   const jsonExample = [
     BT + 'json',
-    '{',
-    '  "viralScore": <0-100, based on curiosity gap + benefit clarity + emotional trigger>,',
-    '  "hookStrength": <0-100, based on first-line arrest + information withholding>,',
-    '  "readability": <0-100, based on sentence length variation + whitespace usage>,',
-    '  "emotionalPull": <0-100, based on FOMO + inspiration + paradigm-shift potential>',
-    '}',
+    {
+      "viralScore": <0-100, based on curiosity gap + benefit clarity + emotional trigger>,
+      "hookStrength": <0-100, based on first-line arrest + information withholding>,
+      "readability": <0-100, based on sentence length variation + whitespace usage>,
+      "emotionalPull": <0-100, based on FOMO + inspiration + paradigm-shift potential>,
+      "storyScore": <0-100, based on narrative coherence + pacing + payoff>,
+      "emotionalArc": <0-100, based on tension build + release + emotional journey>,
+      "retention": <0-100, based on scroll-stop power + re-read value + shareability>
+    }
     BT,
   ].join('\n');
 

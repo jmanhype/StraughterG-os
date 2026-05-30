@@ -7,9 +7,10 @@ interface ChatPanelProps {
   messages: Message[];
   isLoading: boolean;
   onSendMessage: (content: string) => void;
+  onAction?: (action: string) => void;
 }
 
-export default function ChatPanel({ messages, isLoading, onSendMessage }: ChatPanelProps) {
+export default function ChatPanel({ messages, isLoading, onSendMessage, onAction }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -184,7 +185,7 @@ export default function ChatPanel({ messages, isLoading, onSendMessage }: ChatPa
               <span className="text-[10px] font-semibold uppercase tracking-wider" style={{
                 color: msg.role === 'user' ? 'var(--accent)' : 'var(--text-muted)',
               }}>
-                {msg.role === 'user' ? '→ You' : '← KAIZE OS'}
+                {msg.role === 'user' ? '→ You' : '← SGOS'}
               </span>
               {msg.scores && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
@@ -208,6 +209,107 @@ export default function ChatPanel({ messages, isLoading, onSendMessage }: ChatPa
               {formatContent(contentWithoutCode(msg.content))}
               {renderCodeBlocks(msg.content)}
             </div>
+
+            {/* Story Metrics — only on assistant messages */}
+            {msg.role === 'assistant' && msg.scores && (
+              <div className="mt-2 p-3 rounded-lg" style={{
+                background: 'var(--bg-secondary)',
+                border: '1px solid var(--border)',
+              }}>
+                <div className="grid grid-cols-3 gap-4">
+                  {/* Story Score */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        Story Score
+                      </span>
+                      <span className="text-[12px] font-bold" style={{
+                        color: (msg.scores.storyScore ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.storyScore ?? 0) >= 60 ? '#f59e0b' : '#ef4444'
+                      }}>
+                        {msg.scores.storyScore ?? '—'}
+                      </span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+                      <div className="h-full rounded-full" style={{
+                        width: `${msg.scores.storyScore ?? 0}%`,
+                        background: (msg.scores.storyScore ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.storyScore ?? 0) >= 60 ? '#f59e0b' : '#ef4444',
+                      }} />
+                    </div>
+                  </div>
+
+                  {/* Emotional Arc */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        Emotional Arc
+                      </span>
+                      <span className="text-[12px] font-bold" style={{
+                        color: (msg.scores.emotionalArc ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.emotionalArc ?? 0) >= 60 ? '#f59e0b' : '#ef4444'
+                      }}>
+                        {msg.scores.emotionalArc ?? '—'}%
+                      </span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+                      <div className="h-full rounded-full" style={{
+                        width: `${msg.scores.emotionalArc ?? 0}%`,
+                        background: (msg.scores.emotionalArc ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.emotionalArc ?? 0) >= 60 ? '#f59e0b' : '#ef4444',
+                      }} />
+                    </div>
+                  </div>
+
+                  {/* Retention */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
+                        Retention
+                      </span>
+                      <span className="text-[12px] font-bold" style={{
+                        color: (msg.scores.retention ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.retention ?? 0) >= 60 ? '#f59e0b' : '#ef4444'
+                      }}>
+                        {msg.scores.retention ?? '—'}%
+                      </span>
+                    </div>
+                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+                      <div className="h-full rounded-full" style={{
+                        width: `${msg.scores.retention ?? 0}%`,
+                        background: (msg.scores.retention ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.retention ?? 0) >= 60 ? '#f59e0b' : '#ef4444',
+                      }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                  {['Rewrite', 'Expand', 'Shorten', 'Formalize', 'Casualize'].map(action => (
+                    <button
+                      key={action}
+                      onClick={() => onAction?.(action.toLowerCase())}
+                      disabled={isLoading}
+                      className="flex-1 py-1.5 rounded text-[10px] uppercase font-semibold tracking-wider transition-all"
+                      style={{
+                        background: 'var(--bg-tertiary)',
+                        border: '1px solid var(--border)',
+                        color: 'var(--text-secondary)',
+                        cursor: isLoading ? 'not-allowed' : 'pointer',
+                        opacity: isLoading ? 0.5 : 1,
+                      }}
+                      onMouseEnter={e => {
+                        if (!isLoading) {
+                          e.currentTarget.style.borderColor = 'var(--accent)';
+                          e.currentTarget.style.color = 'var(--accent)';
+                        }
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = 'var(--border)';
+                        e.currentTarget.style.color = 'var(--text-secondary)';
+                      }}
+                    >
+                      {action}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
@@ -216,7 +318,7 @@ export default function ChatPanel({ messages, isLoading, onSendMessage }: ChatPa
           <div className="mb-4 animate-slide-in">
             <div className="flex items-center gap-2 mb-1">
               <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                ← KAIZE OS
+                ← SGOS
               </span>
             </div>
             <div className="p-4 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>

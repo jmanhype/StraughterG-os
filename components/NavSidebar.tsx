@@ -8,11 +8,15 @@ interface NavSidebarProps {
 }
 
 const NAV_ITEMS = [
-  { id: 'generate', icon: '⚡', label: 'Generate' },
-  { id: 'threads', icon: '🧵', label: 'Threads' },
-  { id: 'replies', icon: '💬', label: 'Replies' },
-  { id: 'hooks', icon: '🎣', label: 'Hooks' },
-  { id: 'articles', icon: '📝', label: 'Articles' },
+  { id: 'home', icon: '🏠', label: 'Home' },
+  { id: 'agents', icon: '🤖', label: 'Agents' },
+  { id: 'projects', icon: '📁', label: 'Projects' },
+  { id: 'style', icon: '🎨', label: 'Style Guide' },
+  { id: 'history', icon: '📜', label: 'History' },
+];
+
+const BOTTOM_ITEMS = [
+  { id: 'settings', icon: '⚙', label: 'Settings' },
 ];
 
 export default function NavSidebar({ activeNav, onNavChange, onClearChat, messageCount }: NavSidebarProps) {
@@ -27,7 +31,7 @@ export default function NavSidebar({ activeNav, onNavChange, onClearChat, messag
           background: 'linear-gradient(135deg, var(--accent), var(--accent-dim))',
           color: '#000',
         }}>
-          K
+          SG
         </div>
         <span className="text-[9px] mt-1 font-semibold" style={{ color: 'var(--accent)' }}>
           SGOS
@@ -70,13 +74,21 @@ export default function NavSidebar({ activeNav, onNavChange, onClearChat, messag
         >
           🗑
         </button>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center text-[10px]" style={{
-          background: 'var(--bg-tertiary)',
-          border: '1px solid var(--border)',
-          color: 'var(--text-muted)',
-        }}>
-          ⚙
-        </div>
+        {BOTTOM_ITEMS.map(item => (
+          <button
+            key={item.id}
+            onClick={() => onNavChange(item.id)}
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-sm transition-all"
+            style={{
+              background: activeNav === item.id ? 'var(--bg-tertiary)' : 'transparent',
+              border: activeNav === item.id ? '1px solid var(--accent-dim)' : '1px solid var(--border)',
+              color: activeNav === item.id ? 'var(--accent)' : 'var(--text-muted)',
+            }}
+            title={item.label}
+          >
+            {item.icon}
+          </button>
+        ))}
       </div>
     </aside>
   );

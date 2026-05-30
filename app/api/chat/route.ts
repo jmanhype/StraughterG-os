@@ -96,7 +96,8 @@ export async function POST(request: Request) {
       try {
         scores = JSON.parse(jsonMatch[1]);
       } catch {
-        const scoreMatch = content.match(/\{[\s\S]*"viralScore"[\s\S]*\}/);
+        // fallback: find JSON object anywhere in content
+        const scoreMatch = content.match(/\{[^{}]*"viralScore"[^{}]*\}/);
         if (scoreMatch) {
           try {
             scores = JSON.parse(scoreMatch[0]);
@@ -105,6 +106,18 @@ export async function POST(request: Request) {
           }
         }
       }
+    }
+    // Ensure all score fields exist with defaults
+    if (scores) {
+      scores = {
+        viralScore: scores.viralScore ?? 0,
+        hookStrength: scores.hookStrength ?? 0,
+        readability: scores.readability ?? 0,
+        emotionalPull: scores.emotionalPull ?? 0,
+        storyScore: scores.storyScore ?? 0,
+        emotionalArc: scores.emotionalArc ?? 0,
+        retention: scores.retention ?? 0,
+      };
     }
 
     return Response.json({

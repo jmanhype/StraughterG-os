@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { WorkspaceState, ViralScores } from '@/lib/types';
-import { QUICK_TEMPLATES } from '@/lib/systemPrompt';
 
 interface WorkspaceSidebarProps {
   workspace: WorkspaceState;
@@ -11,6 +10,15 @@ interface WorkspaceSidebarProps {
   onAction: (action: string) => void;
   isLoading: boolean;
 }
+
+const QUICK_TEMPLATES = [
+  { id: 1, name: 'Viral Hook Generator', action: 'viral-hook' },
+  { id: 2, name: 'Story Thread Builder', action: 'story-thread' },
+  { id: 3, name: 'Listicle Framework', action: 'listicle' },
+  { id: 4, name: 'Reply Chain Strategist', action: 'reply-chain' },
+  { id: 5, name: 'CTA Optimizer', action: 'cta-optimize' },
+  { id: 6, name: 'Trend Jacking Template', action: 'trend-jack' },
+];
 
 function ScoreGauge({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -67,7 +75,7 @@ export default function WorkspaceSidebar({
   onAction,
   isLoading,
 }: WorkspaceSidebarProps) {
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [showTemplates, setShowTemplates] = useState(true);
 
   const updateWorkspace = (partial: Partial<WorkspaceState>) => {
     onWorkspaceChange({ ...workspace, ...partial });
@@ -153,35 +161,9 @@ export default function WorkspaceSidebar({
           <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
             CONTENT CONTROLS
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="text-[9px] uppercase block mb-1" style={{ color: 'var(--text-muted)' }}>Platform</label>
-              <select
-                value={workspace.platform}
-                onChange={e => updateWorkspace({ platform: e.target.value as WorkspaceState['platform'] })}
-                className="w-full"
-              >
-                <option value="twitter">X / Twitter</option>
-                <option value="linkedin">LinkedIn</option>
-                <option value="longform">Long-form</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-[9px] uppercase block mb-1" style={{ color: 'var(--text-muted)' }}>Format</label>
-              <select
-                value={workspace.format}
-                onChange={e => updateWorkspace({ format: e.target.value as WorkspaceState['format'] })}
-                className="w-full"
-              >
-                <option value="post">Post</option>
-                <option value="thread">Thread</option>
-                <option value="article">Article</option>
-                <option value="reply">Reply</option>
-                <option value="hook">Hooks (5x)</option>
-              </select>
-            </div>
-          </div>
-          <div className="mt-2">
+          
+          {/* Length */}
+          <div className="mb-3">
             <label className="text-[9px] uppercase block mb-1" style={{ color: 'var(--text-muted)' }}>Length</label>
             <div className="flex gap-1">
               {(['short', 'medium', 'long'] as const).map(len => (
@@ -200,6 +182,36 @@ export default function WorkspaceSidebar({
               ))}
             </div>
           </div>
+
+          {/* Format & Platform */}
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[9px] uppercase block mb-1" style={{ color: 'var(--text-muted)' }}>Format</label>
+              <select
+                value={workspace.format}
+                onChange={e => updateWorkspace({ format: e.target.value as WorkspaceState['format'] })}
+                className="w-full"
+              >
+                <option value="post">Post</option>
+                <option value="thread">Thread</option>
+                <option value="article">Article</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] uppercase block mb-1" style={{ color: 'var(--text-muted)' }}>Platform</label>
+              <select
+                value={workspace.platform}
+                onChange={e => updateWorkspace({ platform: e.target.value as WorkspaceState['platform'] })}
+                className="w-full"
+              >
+                <option value="twitter">X (Twitter)</option>
+                <option value="linkedin">LinkedIn</option>
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+                <option value="newsletter">Newsletter</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Tone Engine */}
@@ -207,23 +219,51 @@ export default function WorkspaceSidebar({
           <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
             TONE ENGINE
           </div>
-          <ToneSlider label="Casual ↔ Formal" value={workspace.tone.casual} onChange={v => updateTone('casual', v)} />
+          <ToneSlider label="Professional" value={workspace.tone.professional} onChange={v => updateTone('professional', v)} />
+          <ToneSlider label="Casual" value={workspace.tone.casual} onChange={v => updateTone('casual', v)} />
+          <ToneSlider label="Bold" value={workspace.tone.bold} onChange={v => updateTone('bold', v)} />
           <ToneSlider label="Witty" value={workspace.tone.witty} onChange={v => updateTone('witty', v)} />
-          <ToneSlider label="Provocative" value={workspace.tone.provocative} onChange={v => updateTone('provocative', v)} />
+          <ToneSlider label="Empathetic" value={workspace.tone.empathetic} onChange={v => updateTone('empathetic', v)} />
           <ToneSlider label="Technical" value={workspace.tone.technical} onChange={v => updateTone('technical', v)} />
+          
+          {/* Formal ↔ Casual slider */}
+          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
+                Formal ↔ Casual
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={workspace.formalCasual}
+              onChange={e => updateWorkspace({ formalCasual: Number(e.target.value) })}
+              className="w-full"
+            />
+          </div>
         </div>
 
         {/* Viral Scores */}
         {scores && (
           <div className="mb-4">
-            <div className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
               VIRAL SCORE
             </div>
-            <ScoreGauge
-              label="Overall"
-              value={scores.viralScore}
-              color={scores.viralScore >= 80 ? 'var(--accent)' : scores.viralScore >= 60 ? '#f59e0b' : '#ef4444'}
-            />
+            <div className="mb-3">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>Overall</span>
+                <span className="text-[14px] font-bold" style={{ 
+                  color: scores.viralScore >= 80 ? 'var(--accent)' : scores.viralScore >= 60 ? '#f59e0b' : '#ef4444' 
+                }}>
+                  {scores.viralScore}/100
+                </span>
+              </div>
+            </div>
+            
+            <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
+              ENGAGEMENT POTENTIAL
+            </div>
             <ScoreGauge
               label="Hook Strength"
               value={scores.hookStrength}
@@ -244,75 +284,36 @@ export default function WorkspaceSidebar({
 
         {/* Quick Templates */}
         <div className="mb-4">
-          <button
-            onClick={() => setShowTemplates(!showTemplates)}
-            className="w-full text-left flex items-center justify-between py-2"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-              QUICK TEMPLATES
-            </span>
-            <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-              {showTemplates ? '▲' : '▼'}
-            </span>
-          </button>
-          {showTemplates && (
-            <div className="space-y-1 mt-2">
-              {Object.entries(QUICK_TEMPLATES).map(([name, prompt]) => (
-                <button
-                  key={name}
-                  onClick={() => {
-                    // Copy template to clipboard or trigger send
-                    navigator.clipboard.writeText(prompt);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded text-[11px] transition-all"
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-secondary)',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = 'var(--accent-dim)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                  }}
-                >
-                  {name}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Action Buttons (Fixed at bottom) */}
-      <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--border)' }}>
-        <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
-          QUICK ACTIONS
-        </div>
-        <div className="grid grid-cols-3 gap-1.5">
-          {[
-            { label: 'Rewrite', action: 'rewrite' },
-            { label: 'Expand', action: 'expand' },
-            { label: 'Shorten', action: 'shorten' },
-            { label: 'Formalize', action: 'formalize' },
-            { label: 'Casualize', action: 'casualize' },
-            { label: 'Hooks', action: 'generate 5 alternative hooks for the above content' },
-          ].map(btn => (
-            <button
-              key={btn.label}
-              onClick={() => onAction(btn.action)}
-              disabled={isLoading}
-              className="btn-action text-center"
-              style={{
-                padding: '6px 4px',
-                fontSize: '10px',
-                opacity: isLoading ? 0.5 : 1,
-              }}
-            >
-              {btn.label}
-            </button>
-          ))}
+          <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
+            QUICK TEMPLATES
+          </div>
+          <div className="space-y-1.5">
+            {QUICK_TEMPLATES.map(template => (
+              <button
+                key={template.id}
+                onClick={() => onAction(template.action)}
+                disabled={isLoading}
+                className="w-full text-left px-3 py-2 rounded text-[11px] transition-all flex items-center justify-between"
+                style={{
+                  background: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)',
+                  opacity: isLoading ? 0.5 : 1,
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.borderColor = 'var(--accent-dim)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.borderColor = 'var(--border)';
+                }}
+              >
+                <span>{template.name}</span>
+                <span className="text-[9px] font-mono" style={{ color: 'var(--text-muted)' }}>
+                  ⌘{template.id}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </aside>
