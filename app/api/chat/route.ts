@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { buildSystemPrompt } from '@/lib/systemPrompt';
 import { ChatRequest } from '@/lib/types';
+import { researchTopic, formatResearchForPrompt } from '@/lib/research';
 
 // Provider configs from .env.local
 const PROVIDERS = {
@@ -55,12 +56,40 @@ export async function POST(request: Request) {
     const model = workspace.model || process.env.AI_MODEL || 'qwen-latest-series-invite-beta-v34';
     const { client } = getProviderForModel(model);
 
+    // Extract topic from the latest user message for research
+    const latestUserMessage = messages.filter(m => m.role === 'user').pop();
+    const topic = latestUserMessage?.content || '';
+    
+    // Run research if there's a topic (skip for actions like "rewrite", "expand")
+    let researchContext = '';
+    let researchSources: string[] = [];
+    let researchFacts: { claim: string; source: string }[] = [];
+    if (topic && !action && !topic.startsWith('//')) {
+      try {
+        const research = await researchTopic(topic);
+        researchContext = formatResearchForPrompt(research);
+        researchSources = research.sources;
+        researchFacts = research.facts.map(f => ({ claim: f.claim, source: f.source }));
+      } catch (error) {
+        console.error('Research failed, continuing without it:', error);
+        researchContext = '';
+      }
+    }
+
     const systemPrompt = buildSystemPrompt(workspace);
 
-    // Build message array
+    // Build message array with research context
     const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
       { role: 'system', content: systemPrompt },
     ];
+
+    // Inject research context if available
+    if (researchContext) {
+      openaiMessages.push({
+        role: 'system',
+        content: `CRITICAL RESEARCH DATA:\n${researchContext}\n\nYou MUST only use facts and statistics from the verified research above. Do NOT invent numbers, percentages, or claims that aren't in this research data.`,
+      });
+    }
 
     // Add conversation history
     for (const msg of messages) {
@@ -125,6 +154,10 @@ export async function POST(request: Request) {
       scores,
       model: completion.model,
       usage: completion.usage,
+      research: {
+        sources: researchSources,
+        facts: researchFacts,
+      },
     });
   } catch (error: any) {
     console.error('Chat API error:', error);

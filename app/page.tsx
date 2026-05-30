@@ -226,6 +226,7 @@ export default function Home() {
         role: 'assistant',
         content: data.content,
         scores: data.scores || undefined,
+        research: data.research || undefined,
         timestamp: Date.now(),
       };
 

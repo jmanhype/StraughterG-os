@@ -323,6 +323,38 @@ export default function ChatPanel({
                   </div>
                 </div>
               )}
+
+              {/* Research Sources */}
+              {msg.role === 'assistant' && msg.research && msg.research.sources.length > 0 && (
+                <div className="p-3 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                  <details>
+                    <summary className="text-[10px] uppercase font-bold tracking-wider cursor-pointer" style={{ color: 'var(--accent)' }}>
+                      📚 Research Sources ({msg.research.sources.length})
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {msg.research.facts.slice(0, 5).map((fact, i) => (
+                        <div key={i} className="text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                          <p className="mb-1">{fact.claim}</p>
+                          <a 
+                            href={fact.source} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-[10px] underline hover:no-underline"
+                            style={{ color: 'var(--accent)' }}
+                          >
+                            {fact.source}
+                          </a>
+                        </div>
+                      ))}
+                      {msg.research.sources.length > 5 && (
+                        <p className="text-[10px] italic" style={{ color: 'var(--text-muted)' }}>
+                          + {msg.research.sources.length - 5} more sources
+                        </p>
+                      )}
+                    </div>
+                  </details>
+                </div>
+              )}
             </div>
           </div>
         ))}

@@ -12,6 +12,10 @@ export interface Message {
   scores?: ViralScores;
   timestamp: number;
   attachments?: FileAttachment[];
+  research?: {
+    sources: string[];
+    facts: Array<{ claim: string; source: string }>;
+  };
 }
 
 export interface ViralScores {
