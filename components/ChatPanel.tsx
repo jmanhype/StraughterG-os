@@ -1,17 +1,42 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Message } from '@/lib/types';
+import { Message, FileAttachment } from '@/lib/types';
+import { Session } from '@/lib/sessionStore';
 
 interface ChatPanelProps {
   messages: Message[];
   isLoading: boolean;
   onSendMessage: (content: string) => void;
   onAction?: (action: string) => void;
+  onFileSelect?: (files: FileList | null) => void;
+  onRemoveFile?: (index: number) => void;
+  pendingFiles?: FileAttachment[];
+  fileInputRef?: React.RefObject<HTMLInputElement>;
+  sessions?: Session[];
+  activeSessionId?: string | null;
+  onNewSession?: () => void;
+  onSwitchSession?: (sessionId: string) => void;
+  onDeleteSession?: (sessionId: string) => void;
 }
 
-export default function ChatPanel({ messages, isLoading, onSendMessage, onAction }: ChatPanelProps) {
+export default function ChatPanel({
+  messages,
+  isLoading,
+  onSendMessage,
+  onAction,
+  onFileSelect,
+  onRemoveFile,
+  pendingFiles = [],
+  fileInputRef,
+  sessions = [],
+  activeSessionId,
+  onNewSession,
+  onSwitchSession,
+  onDeleteSession,
+}: ChatPanelProps) {
   const [input, setInput] = useState('');
+  const [showSessions, setShowSessions] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -41,33 +66,26 @@ export default function ChatPanel({ messages, isLoading, onSendMessage, onAction
   };
 
   const formatContent = (content: string) => {
-    // Simple markdown-like rendering
     const lines = content.split('\n');
     return lines.map((line, i) => {
-      // Code blocks
       if (line.startsWith('```')) {
-        return null; // handled separately
+        return null;
       }
-      // Bold
       if (line.startsWith('**') && line.endsWith('**')) {
         return <p key={i} className="font-bold" style={{ color: 'var(--text-primary)' }}>{line.slice(2, -2)}</p>;
       }
-      // Headers
       if (line.startsWith('## ')) {
         return <h2 key={i} className="text-base font-bold mt-4 mb-2" style={{ color: 'var(--accent)' }}>{line.slice(3)}</h2>;
       }
       if (line.startsWith('### ')) {
         return <h3 key={i} className="text-sm font-semibold mt-3 mb-1" style={{ color: 'var(--text-primary)' }}>{line.slice(4)}</h3>;
       }
-      // Blockquote
       if (line.startsWith('> ')) {
         return <p key={i} className="pl-3 border-l-2" style={{ borderColor: 'var(--accent-dim)', color: 'var(--text-secondary)' }}>{line.slice(2)}</p>;
       }
-      // Empty line
       if (line.trim() === '') {
         return <div key={i} className="h-2" />;
       }
-      // Regular text with inline code
       const parts = line.split(/(`[^`]+`)/g);
       return (
         <p key={i}>
@@ -75,7 +93,6 @@ export default function ChatPanel({ messages, isLoading, onSendMessage, onAction
             if (part.startsWith('`') && part.endsWith('`')) {
               return <code key={j} className="px-1 py-0.5 rounded text-[11px]" style={{ background: 'var(--bg-tertiary)', color: 'var(--accent)' }}>{part.slice(1, -1)}</code>;
             }
-            // Bold inline
             const boldParts = part.split(/(\*\*[^*]+\*\*)/g);
             return boldParts.map((bp, k) => {
               if (bp.startsWith('**') && bp.endsWith('**')) {
@@ -98,11 +115,11 @@ export default function ChatPanel({ messages, isLoading, onSendMessage, onAction
       return (
         <div key={i} className="my-2 rounded overflow-hidden" style={{ border: '1px solid var(--border)' }}>
           {lang && (
-            <div className="px-3 py-1 text-[10px] uppercase" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
+            <div className="px-3 py-1 text-[10px] uppercase font-bold" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
               {lang}
             </div>
           )}
-          <pre className="p-3 overflow-x-auto text-[11px]" style={{ background: 'var(--bg-secondary)', margin: 0 }}>
+          <pre className="p-3 text-[11px] overflow-x-auto" style={{ background: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
             <code>{code}</code>
           </pre>
         </div>
@@ -110,270 +127,309 @@ export default function ChatPanel({ messages, isLoading, onSendMessage, onAction
     });
   };
 
-  // Strip code blocks from main content for separate rendering
-  const contentWithoutCode = (content: string) => content.replace(/```[\s\S]*?```/g, '').trim();
+  const contentWithoutCode = (content: string) => {
+    return content.replace(/```[\s\S]*?```/g, '').trim();
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
+
+  const activeSession = sessions.find(s => s.id === activeSessionId);
+  const recentSessions = sessions.slice(0, 10);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between px-6 py-3 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full pulse-green" style={{ background: 'var(--accent)' }} />
-          <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-            Content Engine
+      {/* Session Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--accent)' }} />
+          <span className="text-[11px] font-bold uppercase tracking-wider truncate" style={{ color: 'var(--text-secondary)' }}>
+            {activeSession?.title || 'New Session'}
           </span>
-          <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-            ACTIVE
-          </span>
+          {messages.length > 0 && (
+            <span className="text-[9px] px-1.5 py-0.5 rounded" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
+              {messages.length} msgs
+            </span>
+          )}
         </div>
-        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-          {messages.length} messages
-        </span>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full opacity-60">
-            <div className="text-4xl mb-4">⚡</div>
-            <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--text-secondary)' }}>
-              KAIZE OS — Content Engine
-            </h2>
-            <p className="text-xs text-center max-w-md" style={{ color: 'var(--text-muted)' }}>
-              Generate viral content, hooks, threads, and reply angles.
-              <br />Type a topic or paste a tweet to get started.
-            </p>
-            <div className="mt-6 grid grid-cols-2 gap-2 max-w-sm w-full">
-              {[
-                'Generate 5 hooks about AI agents',
-                'Write a thread about Claude Code',
-                'Create a POV hook about freelancing',
-                'Break down this news: [paste]',
-              ].map((suggestion, i) => (
-                <button
-                  key={i}
-                  onClick={() => onSendMessage(suggestion)}
-                  className="text-left p-3 rounded text-[11px] transition-all"
-                  style={{
-                    background: 'var(--bg-secondary)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-muted)',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = 'var(--accent-dim)';
-                    e.currentTarget.style.color = 'var(--text-secondary)';
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = 'var(--border)';
-                    e.currentTarget.style.color = 'var(--text-muted)';
-                  }}
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`mb-4 animate-slide-in ${msg.role === 'user' ? 'ml-auto max-w-[80%]' : 'max-w-[90%]'}`}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onNewSession}
+            className="px-3 py-1 rounded text-[10px] font-bold uppercase transition-all"
+            style={{ background: 'var(--accent)', color: '#000', border: 'none' }}
+            title="New Session (Cmd+N)"
           >
-            {/* Role label */}
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{
-                color: msg.role === 'user' ? 'var(--accent)' : 'var(--text-muted)',
-              }}>
-                {msg.role === 'user' ? '→ You' : '← SGOS'}
-              </span>
-              {msg.scores && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded" style={{
-                  background: msg.scores.viralScore >= 80 ? 'var(--accent-dim)' : msg.scores.viralScore >= 60 ? '#78350f' : '#7f1d1d',
-                  color: msg.scores.viralScore >= 80 ? 'var(--accent)' : msg.scores.viralScore >= 60 ? '#fbbf24' : '#fca5a5',
-                }}>
-                  SCORE: {msg.scores.viralScore}/100
-                </span>
-              )}
-            </div>
-
-            {/* Content */}
-            <div
-              className="chat-message p-4 rounded-lg text-[13px] leading-relaxed"
-              style={{
-                background: msg.role === 'user' ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
-                border: `1px solid ${msg.role === 'user' ? 'var(--border)' : 'var(--border)'}`,
-                color: 'var(--text-primary)',
-              }}
+            + New
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowSessions(!showSessions)}
+              className="px-2 py-1 rounded text-[10px] transition-all"
+              style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
             >
-              {formatContent(contentWithoutCode(msg.content))}
-              {renderCodeBlocks(msg.content)}
-            </div>
-
-            {/* Story Metrics — only on assistant messages */}
-            {msg.role === 'assistant' && msg.scores && (
-              <div className="mt-2 p-3 rounded-lg" style={{
-                background: 'var(--bg-secondary)',
-                border: '1px solid var(--border)',
-              }}>
-                <div className="grid grid-cols-3 gap-4">
-                  {/* Story Score */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                        Story Score
-                      </span>
-                      <span className="text-[12px] font-bold" style={{
-                        color: (msg.scores.storyScore ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.storyScore ?? 0) >= 60 ? '#f59e0b' : '#ef4444'
-                      }}>
-                        {msg.scores.storyScore ?? '—'}
-                      </span>
-                    </div>
-                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-                      <div className="h-full rounded-full" style={{
-                        width: `${msg.scores.storyScore ?? 0}%`,
-                        background: (msg.scores.storyScore ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.storyScore ?? 0) >= 60 ? '#f59e0b' : '#ef4444',
-                      }} />
-                    </div>
-                  </div>
-
-                  {/* Emotional Arc */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                        Emotional Arc
-                      </span>
-                      <span className="text-[12px] font-bold" style={{
-                        color: (msg.scores.emotionalArc ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.emotionalArc ?? 0) >= 60 ? '#f59e0b' : '#ef4444'
-                      }}>
-                        {msg.scores.emotionalArc ?? '—'}%
-                      </span>
-                    </div>
-                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-                      <div className="h-full rounded-full" style={{
-                        width: `${msg.scores.emotionalArc ?? 0}%`,
-                        background: (msg.scores.emotionalArc ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.emotionalArc ?? 0) >= 60 ? '#f59e0b' : '#ef4444',
-                      }} />
-                    </div>
-                  </div>
-
-                  {/* Retention */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                        Retention
-                      </span>
-                      <span className="text-[12px] font-bold" style={{
-                        color: (msg.scores.retention ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.retention ?? 0) >= 60 ? '#f59e0b' : '#ef4444'
-                      }}>
-                        {msg.scores.retention ?? '—'}%
-                      </span>
-                    </div>
-                    <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-                      <div className="h-full rounded-full" style={{
-                        width: `${msg.scores.retention ?? 0}%`,
-                        background: (msg.scores.retention ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.retention ?? 0) >= 60 ? '#f59e0b' : '#ef4444',
-                      }} />
-                    </div>
-                  </div>
+              History ▼
+            </button>
+            {showSessions && recentSessions.length > 0 && (
+              <div className="absolute right-0 top-full mt-1 w-72 rounded-lg overflow-hidden z-50" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <div className="p-2 border-b" style={{ borderColor: 'var(--border)' }}>
+                  <span className="text-[10px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Recent Sessions</span>
                 </div>
-
-                {/* Action Buttons */}
-                <div className="flex gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                  {['Rewrite', 'Expand', 'Shorten', 'Formalize', 'Casualize'].map(action => (
-                    <button
-                      key={action}
-                      onClick={() => onAction?.(action.toLowerCase())}
-                      disabled={isLoading}
-                      className="flex-1 py-1.5 rounded text-[10px] uppercase font-semibold tracking-wider transition-all"
+                <div className="max-h-64 overflow-y-auto">
+                  {recentSessions.map(session => (
+                    <div
+                      key={session.id}
+                      className="flex items-center justify-between px-3 py-2 hover:bg-opacity-50 transition-all"
                       style={{
-                        background: 'var(--bg-tertiary)',
-                        border: '1px solid var(--border)',
-                        color: 'var(--text-secondary)',
-                        cursor: isLoading ? 'not-allowed' : 'pointer',
-                        opacity: isLoading ? 0.5 : 1,
+                        background: session.id === activeSessionId ? 'var(--bg-tertiary)' : 'transparent',
+                        cursor: 'pointer',
                       }}
-                      onMouseEnter={e => {
-                        if (!isLoading) {
-                          e.currentTarget.style.borderColor = 'var(--accent)';
-                          e.currentTarget.style.color = 'var(--accent)';
-                        }
-                      }}
-                      onMouseLeave={e => {
-                        e.currentTarget.style.borderColor = 'var(--border)';
-                        e.currentTarget.style.color = 'var(--text-secondary)';
+                      onClick={() => {
+                        onSwitchSession?.(session.id);
+                        setShowSessions(false);
                       }}
                     >
-                      {action}
-                    </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] truncate" style={{ color: 'var(--text-primary)' }}>
+                          {session.title}
+                        </div>
+                        <div className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
+                          {session.messages.length} msgs • {new Date(session.updatedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      {onDeleteSession && session.id !== activeSessionId && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteSession(session.id);
+                          }}
+                          className="ml-2 text-[10px] opacity-40 hover:opacity-100 transition-opacity"
+                          style={{ color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
-        ))}
+        </div>
+      </div>
 
-        {/* Loading indicator */}
-        {isLoading && (
-          <div className="mb-4 animate-slide-in">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-                ← SGOS
-              </span>
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        {messages.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full opacity-50">
+            <div className="text-4xl mb-4">⚡</div>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Start a new conversation</p>
+            <p className="text-[11px] mt-2" style={{ color: 'var(--text-muted)' }}>Ask for hooks, threads, or content ideas</p>
+          </div>
+        )}
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className="max-w-[85%] space-y-2">
+              <div className="text-[9px] uppercase font-bold mb-1" style={{ color: msg.role === 'user' ? 'var(--accent)' : 'var(--text-muted)' }}>
+                {msg.role === 'user' ? 'You' : 'SGOS'}
+              </div>
+
+              {/* File Attachments */}
+              {msg.attachments && msg.attachments.length > 0 && (
+                <div className="space-y-1 mb-2">
+                  {msg.attachments.map((att, i) => (
+                    <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded text-[10px]" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+                      <span>{att.type === 'image' ? '🖼' : '📄'}</span>
+                      <span className="truncate flex-1" style={{ color: 'var(--text-secondary)' }}>{att.name}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>{formatFileSize(att.size)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Content */}
+              <div
+                className="chat-message p-4 rounded-lg text-[13px] leading-relaxed"
+                style={{
+                  background: msg.role === 'user' ? 'var(--bg-tertiary)' : 'var(--bg-secondary)',
+                  border: `1px solid ${msg.role === 'user' ? 'var(--border)' : 'var(--border)'}`,
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {formatContent(contentWithoutCode(msg.content))}
+                {renderCodeBlocks(msg.content)}
+              </div>
+
+              {/* Story Metrics */}
+              {msg.role === 'assistant' && msg.scores && (
+                <div className="p-3 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Story Score</span>
+                        <span className="text-[12px] font-bold" style={{ color: (msg.scores.storyScore ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.storyScore ?? 0) >= 60 ? '#f59e0b' : '#ef4444' }}>
+                          {msg.scores.storyScore ?? '—'}
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${msg.scores.storyScore ?? 0}%`, background: (msg.scores.storyScore ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.storyScore ?? 0) >= 60 ? '#f59e0b' : '#ef4444' }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Emotional Arc</span>
+                        <span className="text-[12px] font-bold" style={{ color: (msg.scores.emotionalArc ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.emotionalArc ?? 0) >= 60 ? '#f59e0b' : '#ef4444' }}>
+                          {msg.scores.emotionalArc ?? '—'}%
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${msg.scores.emotionalArc ?? 0}%`, background: (msg.scores.emotionalArc ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.emotionalArc ?? 0) >= 60 ? '#f59e0b' : '#ef4444' }} />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Retention</span>
+                        <span className="text-[12px] font-bold" style={{ color: (msg.scores.retention ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.retention ?? 0) >= 60 ? '#f59e0b' : '#ef4444' }}>
+                          {msg.scores.retention ?? '—'}%
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${msg.scores.retention ?? 0}%`, background: (msg.scores.retention ?? 0) >= 80 ? 'var(--accent)' : (msg.scores.retention ?? 0) >= 60 ? '#f59e0b' : '#ef4444' }} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                    {['Rewrite', 'Expand', 'Shorten', 'Formalize', 'Casualize'].map(action => (
+                      <button
+                        key={action}
+                        onClick={() => onAction?.(action.toLowerCase())}
+                        disabled={isLoading}
+                        className="flex-1 py-1.5 rounded text-[10px] uppercase font-semibold tracking-wider transition-all"
+                        style={{
+                          background: 'var(--bg-tertiary)',
+                          border: '1px solid var(--border)',
+                          color: 'var(--text-secondary)',
+                          cursor: isLoading ? 'not-allowed' : 'pointer',
+                          opacity: isLoading ? 0.5 : 1,
+                        }}
+                        onMouseEnter={e => { if (!isLoading) { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                      >
+                        {action}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="p-4 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-              <span className="typing-dot" />
-              <span className="typing-dot" />
-              <span className="typing-dot" />
-              <span className="text-[11px] ml-2" style={{ color: 'var(--text-muted)' }}>generating...</span>
+          </div>
+        ))}
+        {isLoading && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%]">
+              <div className="text-[9px] uppercase font-bold mb-1" style={{ color: 'var(--text-muted)' }}>SGOS</div>
+              <div className="p-4 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--accent)', animationDelay: '0ms' }} />
+                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--accent)', animationDelay: '150ms' }} />
+                  <div className="w-2 h-2 rounded-full animate-bounce" style={{ background: 'var(--accent)', animationDelay: '300ms' }} />
+                </div>
+              </div>
             </div>
           </div>
         )}
-
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
-      <div className="px-6 py-4 border-t" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-        <form onSubmit={handleSubmit} className="flex gap-3 items-end">
-          <div className="flex-1 relative">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Enter topic, paste a tweet, or type a command..."
-              className="w-full resize-none rounded-lg px-4 py-3 text-[13px] outline-none"
-              style={{
-                background: 'var(--bg-primary)',
-                border: '1px solid var(--border)',
-                color: 'var(--text-primary)',
-                minHeight: '44px',
-                maxHeight: '120px',
-                fontFamily: 'inherit',
-              }}
-              onFocus={e => e.currentTarget.style.borderColor = 'var(--accent-dim)'}
-              onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
-              rows={1}
-              disabled={isLoading}
-            />
+      {/* Pending Files */}
+      {pendingFiles.length > 0 && (
+        <div className="px-4 py-2 border-t" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
+          <div className="flex flex-wrap gap-2">
+            {pendingFiles.map((file, i) => (
+              <div key={i} className="flex items-center gap-2 px-2 py-1 rounded text-[10px]" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+                <span>{file.type === 'image' ? '🖼' : '📄'}</span>
+                <span className="truncate max-w-[120px]" style={{ color: 'var(--text-secondary)' }}>{file.name}</span>
+                <span style={{ color: 'var(--text-muted)' }}>{formatFileSize(file.size)}</span>
+                <button
+                  onClick={() => onRemoveFile?.(i)}
+                  className="ml-1 opacity-60 hover:opacity-100"
+                  style={{ color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
+        </div>
+      )}
+
+      {/* Input Area */}
+      <form onSubmit={handleSubmit} className="px-4 py-3 border-t" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
+        <div className="flex items-end gap-2">
+          {/* File Upload Button */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept=".txt,.md,.csv,.json,.yaml,.yml,.xml,.html,.css,.js,.ts,.tsx,.jsx,.py,.rb,.go,.rs,.java,.c,.cpp,.h,.sh,.bash,.zsh,.env,.log,.sql,image/*"
+            onChange={(e) => onFileSelect?.(e.target.files)}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef?.current?.click()}
+            className="flex-shrink-0 w-8 h-8 rounded flex items-center justify-center transition-all"
+            style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent-dim)'; e.currentTarget.style.color = 'var(--accent)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+            title="Attach file"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M8 3v10M3 8h10" />
+            </svg>
+          </button>
+
+          {/* Text Input */}
+          <textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Enter topic, paste a tweet, or type a command..."
+            className="flex-1 resize-none outline-none text-[13px] leading-relaxed py-2"
+            style={{
+              background: 'var(--bg-primary)',
+              border: '1px solid var(--border)',
+              borderRadius: '8px',
+              color: 'var(--text-primary)',
+              fontFamily: 'inherit',
+              padding: '8px 12px',
+              minHeight: '40px',
+              maxHeight: '120px',
+            }}
+            onFocus={e => e.currentTarget.style.borderColor = 'var(--accent-dim)'}
+            onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
+            rows={1}
+          />
+
+          {/* Send Button */}
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="h-[44px] px-5 rounded-lg font-semibold text-[12px] uppercase tracking-wider transition-all"
+            className="flex-shrink-0 h-8 px-4 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
             style={{
               background: input.trim() && !isLoading ? 'var(--accent)' : 'var(--bg-tertiary)',
               color: input.trim() && !isLoading ? '#000' : 'var(--text-muted)',
               border: 'none',
               cursor: input.trim() && !isLoading ? 'pointer' : 'not-allowed',
-              opacity: input.trim() && !isLoading ? 1 : 0.5,
             }}
           >
             Send
           </button>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
 }

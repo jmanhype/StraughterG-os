@@ -1,9 +1,17 @@
+export interface FileAttachment {
+  name: string;
+  type: 'text' | 'image';
+  content: string; // text content or base64 data URL for images
+  size: number;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
   scores?: ViralScores;
   timestamp: number;
+  attachments?: FileAttachment[];
 }
 
 export interface ViralScores {

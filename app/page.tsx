@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
-import { Message, WorkspaceState, ViralScores } from '@/lib/types';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { Message, WorkspaceState, ViralScores, FileAttachment } from '@/lib/types';
+import { Session, loadSessions, saveSessions, createSession, updateSession, deleteSession, getActiveSessionId, setActiveSessionId } from '@/lib/sessionStore';
 import NavSidebar from '@/components/NavSidebar';
 import ChatPanel from '@/components/ChatPanel';
 import WorkspaceSidebar from '@/components/WorkspaceSidebar';
@@ -20,25 +21,146 @@ const DEFAULT_WORKSPACE: WorkspaceState = {
 };
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [activeSessionId, setActiveSession] = useState<string | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceState>(DEFAULT_WORKSPACE);
   const [isLoading, setIsLoading] = useState(false);
   const [latestScores, setLatestScores] = useState<ViralScores | null>(null);
   const [activeNav, setActiveNav] = useState('home');
+  const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load sessions on mount
+  useEffect(() => {
+    const loaded = loadSessions();
+    const activeId = getActiveSessionId();
+    if (loaded.length > 0) {
+      setSessions(loaded);
+      const active = activeId ? loaded.find(s => s.id === activeId) : loaded[0];
+      if (active) {
+        setActiveSession(active.id);
+        if (active.workspace) setWorkspace(active.workspace);
+      }
+    }
+  }, []);
+
+  // Get current session messages
+  const currentSession = sessions.find(s => s.id === activeSessionId);
+  const messages = currentSession?.messages || [];
+
+  // Save session whenever it changes
+  const saveCurrentSession = useCallback((updatedMessages: Message[], updatedWorkspace?: WorkspaceState) => {
+    if (!activeSessionId) return;
+    const title = updatedMessages.find(m => m.role === 'user')?.content.slice(0, 60) || 'New Session';
+    const updated = updateSession(sessions, activeSessionId, {
+      messages: updatedMessages,
+      workspace: updatedWorkspace || workspace,
+      title: currentSession?.title === 'New Session' ? title : currentSession?.title || title,
+    });
+    setSessions(updated);
+    saveSessions(updated);
+  }, [sessions, activeSessionId, workspace, currentSession]);
+
+  const handleNewSession = useCallback(() => {
+    const newSession = createSession();
+    const updated = [newSession, ...sessions];
+    setSessions(updated);
+    saveSessions(updated);
+    setActiveSession(newSession.id);
+    setActiveSessionId(newSession.id);
+    setWorkspace(DEFAULT_WORKSPACE);
+    setLatestScores(null);
+    setActiveNav('agents');
+  }, [sessions]);
+
+  const handleSwitchSession = useCallback((sessionId: string) => {
+    setActiveSession(sessionId);
+    setActiveSessionId(sessionId);
+    const session = sessions.find(s => s.id === sessionId);
+    if (session?.workspace) setWorkspace(session.workspace);
+    setLatestScores(null);
+    setActiveNav('agents');
+  }, [sessions]);
+
+  const handleDeleteSession = useCallback((sessionId: string) => {
+    const updated = deleteSession(sessions, sessionId);
+    setSessions(updated);
+    saveSessions(updated);
+    if (activeSessionId === sessionId) {
+      if (updated.length > 0) {
+        setActiveSession(updated[0].id);
+        setActiveSessionId(updated[0].id);
+        if (updated[0].workspace) setWorkspace(updated[0].workspace);
+      } else {
+        setActiveSession(null);
+        setWorkspace(DEFAULT_WORKSPACE);
+      }
+    }
+  }, [sessions, activeSessionId]);
+
+  const handleFileSelect = useCallback(async (files: FileList | null) => {
+    if (!files) return;
+    const attachments: FileAttachment[] = [];
+
+    for (const file of Array.from(files)) {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`${file.name} is too large (max 5MB)`);
+        continue;
+      }
+
+      const isImage = file.type.startsWith('image/');
+      const isText = file.type.startsWith('text/') ||
+        ['.txt', '.md', '.csv', '.json', '.yaml', '.yml', '.xml', '.html', '.css', '.js', '.ts', '.tsx', '.jsx', '.py', '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.sh', '.bash', '.zsh', '.env', '.log', '.sql'].some(ext => file.name.endsWith(ext));
+
+      if (isImage) {
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+        attachments.push({ name: file.name, type: 'image', content: dataUrl, size: file.size });
+      } else if (isText) {
+        const text = await file.text();
+        attachments.push({ name: file.name, type: 'text', content: text, size: file.size });
+      } else {
+        alert(`${file.name}: unsupported file type`);
+      }
+    }
+
+    setPendingFiles(prev => [...prev, ...attachments]);
+  }, []);
+
+  const removeFile = useCallback((index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
   const sendMessage = useCallback(async (content: string, action?: string) => {
+    // Build the message content with file attachments
+    let fullContent = content;
+    const attachments = [...pendingFiles];
+
+    if (attachments.length > 0 && !action) {
+      const textFiles = attachments.filter(a => a.type === 'text');
+      if (textFiles.length > 0) {
+        const fileContext = textFiles.map(f => `[FILE: ${f.name}]\n${f.content}\n[/FILE]`).join('\n\n');
+        fullContent = `${content}\n\n---\n\n${fileContext}`;
+      }
+    }
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content,
+      content: fullContent,
       timestamp: Date.now(),
+      attachments: attachments.length > 0 ? attachments : undefined,
     };
 
     const updatedMessages = action ? messages : [...messages, userMessage];
     if (!action) {
-      setMessages(prev => [...prev, userMessage]);
+      saveCurrentSession(updatedMessages);
     }
     setIsLoading(true);
+    setPendingFiles([]);
 
     try {
       const res = await fetch('/api/chat', {
@@ -66,7 +188,8 @@ export default function Home() {
         timestamp: Date.now(),
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      const finalMessages = [...updatedMessages, assistantMessage];
+      saveCurrentSession(finalMessages);
       if (data.scores) {
         setLatestScores(data.scores);
       }
@@ -77,11 +200,12 @@ export default function Home() {
         content: `**ERROR:** ${error.message}\n\nCheck your API key in .env.local and restart the dev server.`,
         timestamp: Date.now(),
       };
-      setMessages(prev => [...prev, errorMessage]);
+      const finalMessages = [...updatedMessages, errorMessage];
+      saveCurrentSession(finalMessages);
     } finally {
       setIsLoading(false);
     }
-  }, [messages, workspace]);
+  }, [messages, workspace, pendingFiles, saveCurrentSession]);
 
   const handleAction = useCallback((action: string) => {
     if (messages.length === 0) return;
@@ -90,12 +214,10 @@ export default function Home() {
   }, [messages, sendMessage]);
 
   const clearChat = useCallback(() => {
-    setMessages([]);
-    setLatestScores(null);
-  }, []);
+    handleNewSession();
+  }, [handleNewSession]);
 
   const insertTemplate = useCallback((template: string) => {
-    // Focus the input and insert the template text
     const input = document.querySelector('textarea') as HTMLTextAreaElement;
     if (input) {
       input.focus();
@@ -105,7 +227,7 @@ export default function Home() {
   }, []);
 
   // Keyboard shortcuts for templates (Cmd+1-6)
-  React.useEffect(() => {
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '6') {
         e.preventDefault();
@@ -122,14 +244,16 @@ export default function Home() {
           insertTemplate(templates[templateIndex]);
         }
       }
+      // Cmd+N for new session
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault();
+        handleNewSession();
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [insertTemplate]);
-
-  // Chat view (agents tab) includes the workspace sidebar
-  const isChatView = activeNav === 'agents' || activeNav === 'generate';
+  }, [insertTemplate, handleNewSession]);
 
   const renderMainContent = () => {
     switch (activeNav) {
@@ -142,10 +266,26 @@ export default function Home() {
               isLoading={isLoading}
               onSendMessage={sendMessage}
               onAction={handleAction}
+              onFileSelect={handleFileSelect}
+              onRemoveFile={removeFile}
+              pendingFiles={pendingFiles}
+              fileInputRef={fileInputRef}
+              sessions={sessions}
+              activeSessionId={activeSessionId}
+              onNewSession={handleNewSession}
+              onSwitchSession={handleSwitchSession}
+              onDeleteSession={handleDeleteSession}
             />
             <WorkspaceSidebar
               workspace={workspace}
-              onWorkspaceChange={setWorkspace}
+              onWorkspaceChange={(ws) => {
+                setWorkspace(ws);
+                if (activeSessionId) {
+                  const updated = updateSession(sessions, activeSessionId, { workspace: ws });
+                  setSessions(updated);
+                  saveSessions(updated);
+                }
+              }}
               scores={latestScores}
               onAction={handleAction}
               onInsertTemplate={insertTemplate}
@@ -158,12 +298,18 @@ export default function Home() {
       case 'style':
         return <StyleGuideView />;
       case 'history':
-        return <HistoryView />;
+        return (
+          <HistoryView
+            sessions={sessions}
+            onSwitchSession={handleSwitchSession}
+            onDeleteSession={handleDeleteSession}
+          />
+        );
       case 'settings':
         return <SettingsView />;
       case 'home':
       default:
-        return <HomeView onNavigate={setActiveNav} messageCount={messages.length} />;
+        return <HomeView onNavigate={setActiveNav} messageCount={messages.length} sessionCount={sessions.length} onNewSession={handleNewSession} />;
     }
   };
 
@@ -183,7 +329,7 @@ export default function Home() {
 }
 
 // ===== HOME DASHBOARD =====
-function HomeView({ onNavigate, messageCount }: { onNavigate: (nav: string) => void; messageCount: number }) {
+function HomeView({ onNavigate, messageCount, sessionCount, onNewSession }: { onNavigate: (nav: string) => void; messageCount: number; sessionCount: number; onNewSession: () => void }) {
   const cards = [
     {
       id: 'agents',
@@ -211,7 +357,7 @@ function HomeView({ onNavigate, messageCount }: { onNavigate: (nav: string) => v
       icon: '📜',
       title: 'History',
       desc: 'Browse past conversations, search outputs, and reuse generated content.',
-      badge: null,
+      badge: sessionCount > 0 ? `${sessionCount} sessions` : null,
     },
     {
       id: 'settings',
@@ -235,6 +381,13 @@ function HomeView({ onNavigate, messageCount }: { onNavigate: (nav: string) => v
             v1.0
           </span>
         </div>
+        <button
+          onClick={onNewSession}
+          className="px-4 py-2 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
+          style={{ background: 'var(--accent)', color: '#000', border: 'none' }}
+        >
+          + New Session
+        </button>
       </div>
 
       {/* Dashboard */}

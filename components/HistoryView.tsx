@@ -1,66 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { Session } from '@/lib/sessionStore';
 
-interface HistoryEntry {
-  id: string;
-  date: number;
-  firstMessage: string;
-  messageCount: number;
-  model: string;
-  messages: { role: string; content: string }[];
+interface HistoryViewProps {
+  sessions: Session[];
+  onSwitchSession: (sessionId: string) => void;
+  onDeleteSession: (sessionId: string) => void;
 }
 
-const STORAGE_KEY = 'sgos-history';
-
-function loadHistory(): HistoryEntry[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveToHistory(messages: { role: string; content: string }[], model: string) {
-  if (typeof window === 'undefined') return;
-  const existing = loadHistory();
-  const entry: HistoryEntry = {
-    id: Date.now().toString(),
-    date: Date.now(),
-    firstMessage: messages.find(m => m.role === 'user')?.content.slice(0, 80) || 'Empty',
-    messageCount: messages.length,
-    model,
-    messages: messages.slice(0, 20), // cap stored messages
-  };
-  const updated = [entry, ...existing].slice(0, 100); // keep last 100
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-}
-
-export default function HistoryView() {
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+export default function HistoryView({ sessions, onSwitchSession, onDeleteSession }: HistoryViewProps) {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => {
-    setHistory(loadHistory());
-  }, []);
-
-  const filtered = history.filter(h =>
-    h.firstMessage.toLowerCase().includes(search.toLowerCase()) ||
-    h.model.toLowerCase().includes(search.toLowerCase())
+  const filtered = sessions.filter(s =>
+    s.title.toLowerCase().includes(search.toLowerCase()) ||
+    s.messages.some(m => m.content.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const deleteEntry = (id: string) => {
-    const updated = history.filter(h => h.id !== id);
-    setHistory(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  };
-
   const clearAll = () => {
-    setHistory([]);
-    localStorage.removeItem(STORAGE_KEY);
+    if (confirm('Delete all sessions? This cannot be undone.')) {
+      sessions.forEach(s => onDeleteSession(s.id));
+    }
   };
 
   const formatDate = (ts: number) => {
@@ -81,7 +42,7 @@ export default function HistoryView() {
             History
           </span>
           <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>
-            {history.length} sessions
+            {sessions.length} sessions
           </span>
         </div>
         <div className="flex gap-2">
@@ -95,7 +56,7 @@ export default function HistoryView() {
             onFocus={e => e.currentTarget.style.borderColor = 'var(--accent-dim)'}
             onBlur={e => e.currentTarget.style.borderColor = 'var(--border)'}
           />
-          {history.length > 0 && (
+          {sessions.length > 0 && (
             <button
               onClick={clearAll}
               className="px-3 py-1.5 rounded text-[10px] uppercase font-bold transition-all"
@@ -113,50 +74,59 @@ export default function HistoryView() {
           <div className="flex flex-col items-center justify-center h-full opacity-50">
             <div className="text-3xl mb-3">📜</div>
             <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-              {history.length === 0 ? 'No history yet' : 'No matches found'}
+              {sessions.length === 0 ? 'No sessions yet' : 'No matches found'}
             </p>
             <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-              {history.length === 0 ? 'Conversations are saved automatically' : 'Try a different search term'}
+              {sessions.length === 0 ? 'Start a conversation in the Content Engine' : 'Try a different search term'}
             </p>
           </div>
         ) : (
           <div className="space-y-2 max-w-3xl mx-auto">
-            {filtered.map(entry => {
-              const isExpanded = expanded === entry.id;
+            {filtered.map(session => {
+              const isExpanded = expanded === session.id;
               return (
                 <div
-                  key={entry.id}
+                  key={session.id}
                   className="rounded-lg transition-all"
                   style={{
                     background: 'var(--bg-secondary)',
                     border: `1px solid ${isExpanded ? 'var(--accent-dim)' : 'var(--border)'}`,
                   }}
                 >
-                  <button
-                    onClick={() => setExpanded(isExpanded ? null : entry.id)}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left"
+                  <div
+                    className="flex items-center justify-between px-4 py-3 cursor-pointer"
+                    onClick={() => setExpanded(isExpanded ? null : session.id)}
                   >
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[9px] px-1.5 py-0.5 rounded uppercase font-bold" style={{
-                          background: 'var(--accent-dim)', color: 'var(--accent)',
-                        }}>
-                          {entry.model.split('/').pop()}
+                      <p className="text-[12px] truncate" style={{ color: 'var(--text-primary)' }}>
+                        {session.title}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                          {session.messages.length} messages
                         </span>
                         <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                          {entry.messageCount} messages
+                          {formatDate(session.updatedAt)}
                         </span>
+                        {session.workspace && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded uppercase" style={{
+                            background: 'var(--accent-dim)', color: 'var(--accent)',
+                          }}>
+                            {session.workspace.model.split('/').pop()}
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[12px] truncate" style={{ color: 'var(--text-primary)' }}>
-                        {entry.firstMessage}
-                      </p>
                     </div>
                     <div className="flex items-center gap-3 ml-4">
-                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                        {formatDate(entry.date)}
-                      </span>
                       <button
-                        onClick={e => { e.stopPropagation(); deleteEntry(entry.id); }}
+                        onClick={(e) => { e.stopPropagation(); onSwitchSession(session.id); }}
+                        className="text-[10px] px-2 py-1 rounded transition-all"
+                        style={{ background: 'var(--accent-dim)', color: 'var(--accent)', border: 'none', cursor: 'pointer' }}
+                      >
+                        Open
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onDeleteSession(session.id); }}
                         className="text-[10px] opacity-40 hover:opacity-100 transition-opacity"
                         style={{ color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer' }}
                       >
@@ -166,10 +136,10 @@ export default function HistoryView() {
                         {isExpanded ? '▲' : '▼'}
                       </span>
                     </div>
-                  </button>
+                  </div>
                   {isExpanded && (
                     <div className="px-4 pb-4 space-y-2 border-t" style={{ borderColor: 'var(--border)' }}>
-                      {entry.messages.map((msg, i) => (
+                      {session.messages.slice(0, 20).map((msg, i) => (
                         <div key={i} className="pt-2">
                           <span className="text-[9px] uppercase font-bold" style={{
                             color: msg.role === 'user' ? 'var(--accent)' : 'var(--text-muted)',
