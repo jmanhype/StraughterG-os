@@ -8,16 +8,17 @@ interface WorkspaceSidebarProps {
   onWorkspaceChange: (ws: WorkspaceState) => void;
   scores: ViralScores | null;
   onAction: (action: string) => void;
+  onInsertTemplate: (template: string) => void;
   isLoading: boolean;
 }
 
 const QUICK_TEMPLATES = [
-  { id: 1, name: 'Viral Hook Generator', action: 'viral-hook' },
-  { id: 2, name: 'Story Thread Builder', action: 'story-thread' },
-  { id: 3, name: 'Listicle Framework', action: 'listicle' },
-  { id: 4, name: 'Reply Chain Strategist', action: 'reply-chain' },
-  { id: 5, name: 'CTA Optimizer', action: 'cta-optimize' },
-  { id: 6, name: 'Trend Jacking Template', action: 'trend-jack' },
+  { id: 1, name: 'Viral Hook Generator', prompt: 'Generate 5 viral hook variations about [TOPIC]. Each hook should: create a curiosity gap, lead with the most shocking fact, use numbers not words, and be under 280 characters. Format as a numbered list.' },
+  { id: 2, name: 'Story Thread Builder', prompt: 'Build a 6-post thread about [TOPIC]. Structure: 1/ Hook with shocking fact, 2/ Context and problem, 3-5/ Core insights with examples, 6/ CTA. Use short sentences, one idea per line, em dashes for pauses.' },
+  { id: 3, name: 'Listicle Framework', prompt: 'Create a listicle post: "X things about [TOPIC] that [audience] needs to know". Use numbered format (1/ 2/ 3/), each point 1-2 lines. Lead with the most valuable insight. End with a sharp closer.' },
+  { id: 4, name: 'Reply Chain Strategist', prompt: 'Generate 3 strategic reply angles to a viral tweet about [TOPIC]: (1) Value Add - expand with unique data, (2) Respectful Contrarian - disagree with evidence, (3) Synthesizer - condense into punchy bullets. Each reply 1-3 sentences.' },
+  { id: 5, name: 'CTA Optimizer', prompt: 'Create 5 high-converting call-to-action variations for [PRODUCT/SERVICE]. Use urgency, social proof, and clear benefits. Format: direct, question-based, FOMO-driven, value-first, and contrarian. Each under 100 characters.' },
+  { id: 6, name: 'Trend Jacking Template', prompt: 'Write a post that connects [TRENDING TOPIC] to [YOUR NICHE]. Formula: reference the trend → pivot to your angle → deliver unexpected insight → close with provocative statement. Make it feel timely but evergreen.' },
 ];
 
 function ScoreGauge({ label, value, color }: { label: string; value: number; color: string }) {
@@ -51,6 +52,7 @@ export default function WorkspaceSidebar({
   onWorkspaceChange,
   scores,
   onAction,
+  onInsertTemplate,
   isLoading,
 }: WorkspaceSidebarProps) {
   const [showTemplates, setShowTemplates] = useState(true);
@@ -256,7 +258,7 @@ export default function WorkspaceSidebar({
             {QUICK_TEMPLATES.map(template => (
               <button
                 key={template.id}
-                onClick={() => onAction(template.action)}
+                onClick={() => onInsertTemplate(template.prompt)}
                 disabled={isLoading}
                 className="w-full text-left px-3 py-2 rounded text-[11px] transition-all flex items-center justify-between"
                 style={{

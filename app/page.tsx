@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Message, WorkspaceState, ViralScores } from '@/lib/types';
 import NavSidebar from '@/components/NavSidebar';
 import ChatPanel from '@/components/ChatPanel';
@@ -94,6 +94,40 @@ export default function Home() {
     setLatestScores(null);
   }, []);
 
+  const insertTemplate = useCallback((template: string) => {
+    // Focus the input and insert the template text
+    const input = document.querySelector('textarea') as HTMLTextAreaElement;
+    if (input) {
+      input.focus();
+      input.value = template;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  }, []);
+
+  // Keyboard shortcuts for templates (Cmd+1-6)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '6') {
+        e.preventDefault();
+        const templateIndex = parseInt(e.key) - 1;
+        const templates = [
+          'Generate 5 viral hook variations about [TOPIC]. Each hook should: create a curiosity gap, lead with the most shocking fact, use numbers not words, and be under 280 characters. Format as a numbered list.',
+          'Build a 6-post thread about [TOPIC]. Structure: 1/ Hook with shocking fact, 2/ Context and problem, 3-5/ Core insights with examples, 6/ CTA. Use short sentences, one idea per line, em dashes for pauses.',
+          'Create a listicle post: "X things about [TOPIC] that [audience] needs to know". Use numbered format (1/ 2/ 3/), each point 1-2 lines. Lead with the most valuable insight. End with a sharp closer.',
+          'Generate 3 strategic reply angles to a viral tweet about [TOPIC]: (1) Value Add - expand with unique data, (2) Respectful Contrarian - disagree with evidence, (3) Synthesizer - condense into punchy bullets. Each reply 1-3 sentences.',
+          'Create 5 high-converting call-to-action variations for [PRODUCT/SERVICE]. Use urgency, social proof, and clear benefits. Format: direct, question-based, FOMO-driven, value-first, and contrarian. Each under 100 characters.',
+          'Write a post that connects [TRENDING TOPIC] to [YOUR NICHE]. Formula: reference the trend → pivot to your angle → deliver unexpected insight → close with provocative statement. Make it feel timely but evergreen.',
+        ];
+        if (templates[templateIndex]) {
+          insertTemplate(templates[templateIndex]);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [insertTemplate]);
+
   // Chat view (agents tab) includes the workspace sidebar
   const isChatView = activeNav === 'agents' || activeNav === 'generate';
 
@@ -114,6 +148,7 @@ export default function Home() {
               onWorkspaceChange={setWorkspace}
               scores={latestScores}
               onAction={handleAction}
+              onInsertTemplate={insertTemplate}
               isLoading={isLoading}
             />
           </>
