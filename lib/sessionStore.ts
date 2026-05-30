@@ -5,6 +5,7 @@ export interface Session {
   title: string;
   messages: Message[];
   workspace: WorkspaceState | null;
+  projectId?: string;
   createdAt: number;
   updatedAt: number;
 }

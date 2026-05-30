@@ -23,12 +23,17 @@ const DEFAULT_WORKSPACE: WorkspaceState = {
 export default function Home() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSessionId, setActiveSession] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [workspace, setWorkspace] = useState<WorkspaceState>(DEFAULT_WORKSPACE);
   const [isLoading, setIsLoading] = useState(false);
   const [latestScores, setLatestScores] = useState<ViralScores | null>(null);
   const [activeNav, setActiveNav] = useState('home');
   const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sessionsRef = useRef<Session[]>([]);
+
+  // Keep ref in sync with state
+  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
 
   // Load sessions on mount
   useEffect(() => {
@@ -39,64 +44,79 @@ export default function Home() {
       const active = activeId ? loaded.find(s => s.id === activeId) : loaded[0];
       if (active) {
         setActiveSession(active.id);
+        setMessages(active.messages || []);
         if (active.workspace) setWorkspace(active.workspace);
       }
     }
   }, []);
 
-  // Get current session messages
-  const currentSession = sessions.find(s => s.id === activeSessionId);
-  const messages = currentSession?.messages || [];
-
-  // Save session whenever it changes
-  const saveCurrentSession = useCallback((updatedMessages: Message[], updatedWorkspace?: WorkspaceState) => {
-    if (!activeSessionId) return;
-    const title = updatedMessages.find(m => m.role === 'user')?.content.slice(0, 60) || 'New Session';
-    const updated = updateSession(sessions, activeSessionId, {
-      messages: updatedMessages,
-      workspace: updatedWorkspace || workspace,
-      title: currentSession?.title === 'New Session' ? title : currentSession?.title || title,
+  // Persist session to localStorage
+  const persistSession = useCallback((sessionId: string, updatedMessages: Message[], ws?: WorkspaceState) => {
+    setSessions(prev => {
+      const title = updatedMessages.find(m => m.role === 'user')?.content.slice(0, 60) || 'New Session';
+      const existing = prev.find(s => s.id === sessionId);
+      const currentTitle = existing?.title;
+      const finalTitle = (!currentTitle || currentTitle === 'New Session') ? title : currentTitle;
+      const updated = prev.map(s =>
+        s.id === sessionId
+          ? { ...s, messages: updatedMessages, workspace: ws || workspace, title: finalTitle, updatedAt: Date.now() }
+          : s
+      );
+      saveSessions(updated);
+      return updated;
     });
-    setSessions(updated);
-    saveSessions(updated);
-  }, [sessions, activeSessionId, workspace, currentSession]);
+  }, [workspace]);
 
   const handleNewSession = useCallback(() => {
     const newSession = createSession();
-    const updated = [newSession, ...sessions];
-    setSessions(updated);
-    saveSessions(updated);
+    setSessions(prev => {
+      const updated = [newSession, ...prev];
+      saveSessions(updated);
+      return updated;
+    });
     setActiveSession(newSession.id);
     setActiveSessionId(newSession.id);
+    setMessages([]);
     setWorkspace(DEFAULT_WORKSPACE);
     setLatestScores(null);
+    setPendingFiles([]);
     setActiveNav('agents');
-  }, [sessions]);
+  }, []);
 
   const handleSwitchSession = useCallback((sessionId: string) => {
+    const session = sessionsRef.current.find(s => s.id === sessionId);
+    if (!session) return;
     setActiveSession(sessionId);
     setActiveSessionId(sessionId);
-    const session = sessions.find(s => s.id === sessionId);
-    if (session?.workspace) setWorkspace(session.workspace);
+    setMessages(session.messages || []);
+    if (session.workspace) setWorkspace(session.workspace);
+    else setWorkspace(DEFAULT_WORKSPACE);
     setLatestScores(null);
+    setPendingFiles([]);
     setActiveNav('agents');
-  }, [sessions]);
+  }, []);
 
   const handleDeleteSession = useCallback((sessionId: string) => {
-    const updated = deleteSession(sessions, sessionId);
-    setSessions(updated);
-    saveSessions(updated);
+    setSessions(prev => {
+      const updated = prev.filter(s => s.id !== sessionId);
+      saveSessions(updated);
+      return updated;
+    });
     if (activeSessionId === sessionId) {
-      if (updated.length > 0) {
-        setActiveSession(updated[0].id);
-        setActiveSessionId(updated[0].id);
-        if (updated[0].workspace) setWorkspace(updated[0].workspace);
+      const remaining = sessionsRef.current.filter(s => s.id !== sessionId);
+      if (remaining.length > 0) {
+        setActiveSession(remaining[0].id);
+        setActiveSessionId(remaining[0].id);
+        setMessages(remaining[0].messages || []);
+        if (remaining[0].workspace) setWorkspace(remaining[0].workspace);
+        else setWorkspace(DEFAULT_WORKSPACE);
       } else {
         setActiveSession(null);
+        setMessages([]);
         setWorkspace(DEFAULT_WORKSPACE);
       }
     }
-  }, [sessions, activeSessionId]);
+  }, [activeSessionId]);
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files) return;
@@ -135,7 +155,7 @@ export default function Home() {
   }, []);
 
   const sendMessage = useCallback(async (content: string, action?: string) => {
-    // Build the message content with file attachments
+    // Build message with file attachments
     let fullContent = content;
     const attachments = [...pendingFiles];
 
@@ -155,10 +175,31 @@ export default function Home() {
       attachments: attachments.length > 0 ? attachments : undefined,
     };
 
-    const updatedMessages = action ? messages : [...messages, userMessage];
+    const updatedMessages = action ? [...messages] : [...messages, userMessage];
+
     if (!action) {
-      saveCurrentSession(updatedMessages);
+      setMessages(updatedMessages);
     }
+
+    // Ensure we have an active session
+    let sessionId = activeSessionId;
+    if (!sessionId) {
+      const newSession = createSession();
+      sessionId = newSession.id;
+      setActiveSession(sessionId);
+      setActiveSessionId(sessionId);
+      setSessions(prev => {
+        const updated = [newSession, ...prev];
+        saveSessions(updated);
+        return updated;
+      });
+    }
+
+    // Save user message
+    if (!action) {
+      persistSession(sessionId, updatedMessages);
+    }
+
     setIsLoading(true);
     setPendingFiles([]);
 
@@ -189,7 +230,9 @@ export default function Home() {
       };
 
       const finalMessages = [...updatedMessages, assistantMessage];
-      saveCurrentSession(finalMessages);
+      setMessages(finalMessages);
+      persistSession(sessionId, finalMessages);
+
       if (data.scores) {
         setLatestScores(data.scores);
       }
@@ -201,11 +244,12 @@ export default function Home() {
         timestamp: Date.now(),
       };
       const finalMessages = [...updatedMessages, errorMessage];
-      saveCurrentSession(finalMessages);
+      setMessages(finalMessages);
+      persistSession(sessionId, finalMessages);
     } finally {
       setIsLoading(false);
     }
-  }, [messages, workspace, pendingFiles, saveCurrentSession]);
+  }, [messages, workspace, pendingFiles, activeSessionId, persistSession]);
 
   const handleAction = useCallback((action: string) => {
     if (messages.length === 0) return;
@@ -226,7 +270,7 @@ export default function Home() {
     }
   }, []);
 
-  // Keyboard shortcuts for templates (Cmd+1-6)
+  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '6') {
@@ -244,7 +288,6 @@ export default function Home() {
           insertTemplate(templates[templateIndex]);
         }
       }
-      // Cmd+N for new session
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault();
         handleNewSession();
@@ -254,6 +297,13 @@ export default function Home() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [insertTemplate, handleNewSession]);
+
+  const handleWorkspaceChange = useCallback((ws: WorkspaceState) => {
+    setWorkspace(ws);
+    if (activeSessionId) {
+      persistSession(activeSessionId, messages, ws);
+    }
+  }, [activeSessionId, messages, persistSession]);
 
   const renderMainContent = () => {
     switch (activeNav) {
@@ -278,14 +328,7 @@ export default function Home() {
             />
             <WorkspaceSidebar
               workspace={workspace}
-              onWorkspaceChange={(ws) => {
-                setWorkspace(ws);
-                if (activeSessionId) {
-                  const updated = updateSession(sessions, activeSessionId, { workspace: ws });
-                  setSessions(updated);
-                  saveSessions(updated);
-                }
-              }}
+              onWorkspaceChange={handleWorkspaceChange}
               scores={latestScores}
               onAction={handleAction}
               onInsertTemplate={insertTemplate}
@@ -294,7 +337,13 @@ export default function Home() {
           </>
         );
       case 'projects':
-        return <ProjectsView />;
+        return (
+          <ProjectsView
+            sessions={sessions}
+            onSwitchSession={handleSwitchSession}
+            onNewSession={handleNewSession}
+          />
+        );
       case 'style':
         return <StyleGuideView />;
       case 'history':
@@ -370,7 +419,6 @@ function HomeView({ onNavigate, messageCount, sessionCount, onNewSession }: { on
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-      {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full pulse-green" style={{ background: 'var(--accent)' }} />
@@ -390,10 +438,8 @@ function HomeView({ onNavigate, messageCount, sessionCount, onNewSession }: { on
         </button>
       </div>
 
-      {/* Dashboard */}
       <div className="flex-1 overflow-y-auto px-6 py-8">
         <div className="max-w-3xl mx-auto">
-          {/* Hero */}
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
               StraughterG OS
@@ -406,7 +452,6 @@ function HomeView({ onNavigate, messageCount, sessionCount, onNewSession }: { on
             </p>
           </div>
 
-          {/* Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {cards.map(card => (
               <button
@@ -446,7 +491,6 @@ function HomeView({ onNavigate, messageCount, sessionCount, onNewSession }: { on
             ))}
           </div>
 
-          {/* Quick Start */}
           <div className="mt-6 p-4 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
             <h3 className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
               Quick Start
