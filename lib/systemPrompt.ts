@@ -3,6 +3,11 @@ import { WorkspaceState } from './types';
 const BT = '```';
 
 export function buildSystemPrompt(workspace: WorkspaceState): string {
+  const tone = workspace.tone || 'casual';
+  const platform = workspace.platform || 'twitter';
+  const format = workspace.format || 'post';
+  const length = workspace.length || 'medium';
+
   // Tone-specific writing rules
   const toneRules: Record<string, string[]> = {
     professional: [
@@ -97,17 +102,17 @@ export function buildSystemPrompt(workspace: WorkspaceState): string {
     'You are an advanced AI Content Automation Engine optimized for social media virality.',
     'Your objective: generate, analyze, and refine high-converting content that drives impressions, follower growth, and engagement.',
     '',
-    '## TONE: ' + workspace.tone.toUpperCase(),
-    ...toneRules[workspace.tone],
+    '## TONE: ' + tone.toUpperCase(),
+    ...toneRules[tone],
     '',
-    '## PLATFORM: ' + workspace.platform.toUpperCase(),
-    platformRules[workspace.platform],
+    '## PLATFORM: ' + platform.toUpperCase(),
+    platformRules[platform],
     '',
-    '## FORMAT: ' + workspace.format.toUpperCase(),
-    formatRules[workspace.format],
+    '## FORMAT: ' + format.toUpperCase(),
+    formatRules[format],
     '',
-    '## LENGTH: ' + workspace.length.toUpperCase(),
-    workspace.length === 'short' ? 'Keep it tight. Under 100 words.' : workspace.length === 'medium' ? 'Standard length. 100-250 words.' : 'Go deep. 250+ words. Full detail.',
+    '## LENGTH: ' + length.toUpperCase(),
+    length === 'short' ? 'Keep it tight. Under 100 words.' : length === 'medium' ? 'Standard length. 100-250 words.' : 'Go deep. 250+ words. Full detail.',
     '',
     '## UNIVERSAL RULES (apply to all tones)',
     '- Short sentences. No filler',

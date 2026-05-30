@@ -60,18 +60,31 @@ export async function POST(request: Request) {
     const latestUserMessage = messages.filter(m => m.role === 'user').pop();
     const topic = latestUserMessage?.content || '';
     
+    console.log('🔍 Research trigger check:', { 
+      hasTopic: !!topic, 
+      topicPreview: topic.substring(0, 50),
+      hasAction: !!action,
+      startsWithSlash: topic.startsWith('//')
+    });
+    
     // Run research if there's a topic (skip for actions like "rewrite", "expand")
     let researchContext = '';
     let researchSources: string[] = [];
     let researchFacts: { claim: string; source: string }[] = [];
     if (topic && !action && !topic.startsWith('//')) {
       try {
+        console.log('🔬 Running Zhipu Web Search for:', topic.substring(0, 100));
         const research = await researchTopic(topic);
+        console.log('✅ Research complete:', {
+          sources: research.sources.length,
+          facts: research.facts.length,
+          summary: research.summary
+        });
         researchContext = formatResearchForPrompt(research);
         researchSources = research.sources;
         researchFacts = research.facts.map(f => ({ claim: f.claim, source: f.source }));
       } catch (error) {
-        console.error('Research failed, continuing without it:', error);
+        console.error('❌ Research failed, continuing without it:', error);
         researchContext = '';
       }
     }
