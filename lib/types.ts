@@ -22,15 +22,7 @@ export interface WorkspaceState {
   platform: 'twitter' | 'linkedin' | 'instagram' | 'tiktok' | 'newsletter';
   format: 'post' | 'thread' | 'article' | 'reply' | 'hook';
   length: 'short' | 'medium' | 'long';
-  tone: {
-    professional: number;
-    casual: number;
-    bold: number;
-    witty: number;
-    empathetic: number;
-    technical: number;
-  };
-  formalCasual: number; // 0=formal, 100=casual
+  tone: 'professional' | 'casual' | 'bold' | 'witty';
 }
 
 export interface ChatRequest {

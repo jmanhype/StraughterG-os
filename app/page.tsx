@@ -16,15 +16,7 @@ const DEFAULT_WORKSPACE: WorkspaceState = {
   platform: 'twitter',
   format: 'post',
   length: 'medium',
-  tone: {
-    professional: 40,
-    casual: 60,
-    bold: 50,
-    witty: 50,
-    empathetic: 40,
-    technical: 60,
-  },
-  formalCasual: 65,
+  tone: 'casual',
 };
 
 export default function Home() {

@@ -45,28 +45,6 @@ function ScoreGauge({ label, value, color }: { label: string; value: number; col
   );
 }
 
-function ToneSlider({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="mb-3">
-      <div className="flex justify-between items-center mb-1">
-        <span className="text-[10px] uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>
-          {label}
-        </span>
-        <span className="text-[10px] font-mono" style={{ color: 'var(--text-secondary)' }}>
-          {value}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="w-full"
-      />
-    </div>
-  );
-}
 
 export default function WorkspaceSidebar({
   workspace,
@@ -79,12 +57,6 @@ export default function WorkspaceSidebar({
 
   const updateWorkspace = (partial: Partial<WorkspaceState>) => {
     onWorkspaceChange({ ...workspace, ...partial });
-  };
-
-  const updateTone = (key: keyof WorkspaceState['tone'], value: number) => {
-    updateWorkspace({
-      tone: { ...workspace.tone, [key]: value },
-    });
   };
 
   return (
@@ -219,28 +191,21 @@ export default function WorkspaceSidebar({
           <div className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
             TONE ENGINE
           </div>
-          <ToneSlider label="Professional" value={workspace.tone.professional} onChange={v => updateTone('professional', v)} />
-          <ToneSlider label="Casual" value={workspace.tone.casual} onChange={v => updateTone('casual', v)} />
-          <ToneSlider label="Bold" value={workspace.tone.bold} onChange={v => updateTone('bold', v)} />
-          <ToneSlider label="Witty" value={workspace.tone.witty} onChange={v => updateTone('witty', v)} />
-          <ToneSlider label="Empathetic" value={workspace.tone.empathetic} onChange={v => updateTone('empathetic', v)} />
-          <ToneSlider label="Technical" value={workspace.tone.technical} onChange={v => updateTone('technical', v)} />
-          
-          {/* Formal ↔ Casual slider */}
-          <div className="mt-4 pt-4 border-t" style={{ borderColor: 'var(--border)' }}>
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: 'var(--text-muted)' }}>
-                Formal ↔ Casual
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              value={workspace.formalCasual}
-              onChange={e => updateWorkspace({ formalCasual: Number(e.target.value) })}
-              className="w-full"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            {(['professional', 'casual', 'bold', 'witty'] as const).map(tone => (
+              <button
+                key={tone}
+                onClick={() => updateWorkspace({ tone })}
+                className="py-2 rounded text-[11px] uppercase font-semibold transition-all"
+                style={{
+                  background: workspace.tone === tone ? 'var(--accent)' : 'var(--bg-tertiary)',
+                  border: `1px solid ${workspace.tone === tone ? 'var(--accent)' : 'var(--border)'}`,
+                  color: workspace.tone === tone ? '#000' : 'var(--text-muted)',
+                }}
+              >
+                {tone}
+              </button>
+            ))}
           </div>
         </div>
 

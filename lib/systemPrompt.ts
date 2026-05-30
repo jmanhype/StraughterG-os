@@ -3,13 +3,13 @@ import { WorkspaceState } from './types';
 const BT = '```';
 
 export function buildSystemPrompt(workspace: WorkspaceState): string {
-  const toneDescriptions: string[] = [];
-  if (workspace.tone.casual > 60) toneDescriptions.push('casual, conversational');
-  if (workspace.tone.casual < 40) toneDescriptions.push('formal, professional');
-  if (workspace.tone.witty > 60) toneDescriptions.push('witty, sharp humor');
-  if (workspace.tone.provocative > 60) toneDescriptions.push('provocative, contrarian');
-  if (workspace.tone.technical > 60) toneDescriptions.push('technical, precise');
-  if (toneDescriptions.length === 0) toneDescriptions.push('balanced, direct');
+  const toneDescription = workspace.tone === 'professional' 
+    ? 'professional, authoritative, polished'
+    : workspace.tone === 'casual'
+    ? 'casual, conversational, approachable'
+    : workspace.tone === 'bold'
+    ? 'bold, confident, provocative'
+    : 'witty, clever, humorous';
 
   const formatRules: Record<string, string> = {
     post: 'Single X post. Max 280 characters. Punchy, self-contained.',
@@ -66,11 +66,11 @@ export function buildSystemPrompt(workspace: WorkspaceState): string {
     workspace.length === 'short' ? 'Keep it tight. Under 100 words.' : workspace.length === 'medium' ? 'Standard length. 100-250 words.' : 'Go deep. 250+ words. Full detail.',
     '',
     '## TONE ENGINE',
-    'Active tone: ' + toneDescriptions.join(', '),
-    workspace.tone.casual > 60 ? '- Write like texting a smart friend. Drop grammar rules when it adds punch.' : '',
-    workspace.tone.witty > 60 ? '- Inject dry humor, unexpected comparisons, clever callbacks.' : '',
-    workspace.tone.provocative > 60 ? '- Challenge assumptions. Take contrarian positions. Make people stop scrolling.' : '',
-    workspace.tone.technical > 60 ? '- Include specific numbers, tool names, technical details, code snippets.' : '',
+    'Active tone: ' + toneDescription,
+    workspace.tone === 'casual' ? '- Write like texting a smart friend. Drop grammar rules when it adds punch.' : '',
+    workspace.tone === 'witty' ? '- Inject dry humor, unexpected comparisons, clever callbacks.' : '',
+    workspace.tone === 'bold' ? '- Challenge assumptions. Take contrarian positions. Make people stop scrolling.' : '',
+    workspace.tone === 'professional' ? '- Maintain authority and polish. Use precise language and structured arguments.' : '',
     '',
     '## POST STRUCTURE',
     '- Hook (1-2 lines) → shocking fact or POV',
