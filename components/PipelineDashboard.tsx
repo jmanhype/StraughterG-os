@@ -21,6 +21,8 @@ interface Opportunity {
   hook_type?: string;
   structural_pattern?: string;
   genome_engagement?: number;
+  published?: boolean;
+  feedback_id?: number;
 }
 
 interface Genome {
@@ -143,6 +145,7 @@ const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCo
   onDismiss: () => void;
   onCopy: () => void;
   onRegenerate: () => void;
+  onPublish: () => void;
   onGenerate: (prompt: string) => void;
 }) => {
   const breakdown = parseBreakdown(opp.score_breakdown);
@@ -241,6 +244,20 @@ const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCo
             >
               📋 Copy
             </button>
+            {!opp.published && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onPublish(); }}
+                className="px-3 py-1.5 rounded text-[10px] font-bold transition-all"
+                style={{ background: '#10b981', color: '#fff' }}
+              >
+                ✅ Published
+              </button>
+            )}
+            {opp.published && (
+              <span className="px-2 py-1 rounded text-[9px] font-bold" style={{ background: '#10b98120', color: '#10b981' }}>
+                ✓ Published
+              </span>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -446,6 +463,21 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
     } catch { /* ignore */ }
   }, []);
 
+  const publishOpportunity = useCallback(async (opp: Opportunity) => {
+    try {
+      const res = await fetch(
+        `${BACKEND_URL}/feedback/published?opportunity_id=${opp.id}&genome_id=${opp.genome_id}&variant_type=${opp.variant_type}&score=${opp.score}&platform=twitter`,
+        { method: 'POST' }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setOpportunities(prev => prev.map(o =>
+          o.id === opp.id ? { ...o, published: true, feedback_id: data.id } : o
+        ));
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   // ─── Render ───────────────────────────────────────────────────────────
 
   if (backendStatus === 'offline') {
@@ -563,6 +595,7 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
                   onDismiss={() => dismiss(opp.id)}
                   onCopy={() => copyContent(opp)}
                   onRegenerate={() => regenerate(opp.genome_id)}
+                  onPublish={() => publishOpportunity(opp)}
                   onGenerate={(p) => onGenerate?.(p)}
                 />
               ))
