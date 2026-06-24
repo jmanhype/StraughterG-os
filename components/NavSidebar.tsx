@@ -11,6 +11,7 @@ interface NavSidebarProps {
 
 const NAV_ITEMS = [
   { id: 'home', icon: '🏠', label: 'Home' },
+  { id: 'pipeline', icon: '🧬', label: 'Viral Pipeline' },
   { id: 'research', icon: '📡', label: 'Research Feed' },
   { id: 'search', icon: '🔍', label: 'Search Posts' },
   { id: 'creators', icon: '👤', label: 'Creators' },

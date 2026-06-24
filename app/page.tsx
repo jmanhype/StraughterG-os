@@ -15,6 +15,7 @@ import CarouselView from '@/components/CarouselView';
 import TranscribeView from '@/components/TranscribeView';
 import SearchView from '@/components/SearchView';
 import BoardsView from '@/components/BoardsView';
+import PipelineDashboard from '@/components/PipelineDashboard';
 import HomeView from '@/components/HomeView';
 import { NavErrorBoundary } from '@/components/NavErrorBoundary';
 import { useSessionStore } from '@/hooks/useSessionStore';
@@ -163,6 +164,8 @@ export default function Home() {
         return <SearchView onGenerate={(topic) => goToChatWithTemplate(`Write a thread about ${topic}. Reference the outlier data and add your unique angle.`)} onSavePost={() => {}} />;
       case 'boards':
         return <BoardsView onGenerate={(topic) => goToChatWithTemplate(`Write about: ${topic}`)} />;
+      case 'pipeline':
+        return <PipelineDashboard onGenerate={(prompt) => goToChatWithTemplate(prompt)} />;
       case 'home':
       default:
         return <HomeView onNavigate={setActiveNav} messageCount={messages.length} sessionCount={sessions.length} onNewSession={onNewSession} onInsertTemplate={insertTemplate} />;
