@@ -1,6 +1,6 @@
 # StraughterG OS
 
-> AI content engine built by a systems engineer, for systems engineers.
+> AI content engine + autonomous viral content pipeline. Built by a systems engineer, for systems engineers.
 
 ![StraughterG OS](https://img.shields.io/badge/StraughterG%20OS-v1.0-blue?style=flat-square)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square)
@@ -11,12 +11,24 @@
 
 ## What is this?
 
-An AI content generation system with a dark terminal UI, multi-model routing, and built-in viral score analysis.
+A full-stack AI content system: generation UI + autonomous pipeline that detects viral content, extracts what makes it work, generates your own versions, and learns from real-world performance.
 
-Inspired by the "Kaize OS" concept that was promised but never shipped. This is the working version.
+**Frontend** (this repo): Dark terminal UI for content generation + Pipeline Dashboard for managing the autonomous system.
+
+**Backend** ([sgos-backend](https://github.com/jmanhype/sgos-backend)): FastAPI server with viral outlier detection, genome extraction, adaptive scoring, and feedback loop.
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Frontend Guide](docs/FRONTEND.md) | UI components, Pipeline Dashboard, data flow, styling |
+| [Backend Architecture](https://github.com/jmanhype/sgos-backend/blob/main/docs/ARCHITECTURE.md) | System overview, design patterns, DB schema |
+| [API Reference](https://github.com/jmanhype/sgos-backend/blob/main/docs/API_REFERENCE.md) | Every endpoint with examples and edge cases |
+| [Pipeline Deep Dive](https://github.com/jmanhype/sgos-backend/blob/main/docs/PIPELINE.md) | How the viral content pipeline works |
 
 ## Features
 
+### Content Generation
 - **Multi-model routing** — Qwen (DashScope), Z.AI/GLM, OpenAI — auto-detected by model prefix
 - **Tone engine** — 4-axis control (casual↔formal, witty, provocative, technical)
 - **Viral scoring** — LLM self-evaluation: virality, hook strength, readability, emotional pull
@@ -25,6 +37,14 @@ Inspired by the "Kaize OS" concept that was promised but never shipped. This is 
 - **Quick actions** — rewrite, expand, shorten, formalize, casualize
 - **8 content templates** — story thread, listicle, POV hook, comparison, rage bait, news breakdown, reply generator, roadmap
 - **Writing system** — lowercase, punchy, no filler, no corporate glaze
+
+### Pipeline Dashboard
+- **Opportunities tab** — Ranked content drafts with score badges, expand/collapse, platform export
+- **Genomes tab** — Extracted viral DNA from outlier posts
+- **Adaptive tab** — Feedback loop status, trained scorer weights, top performers
+- **Platform export** — One-click X thread / LinkedIn formatting with clipboard copy
+- **Bulk actions** — Dismiss all low-scoring, copy top N formatted, regenerate top genomes
+- **Auto-refresh** — Polls backend every 30 seconds
 
 ## Stack
 
