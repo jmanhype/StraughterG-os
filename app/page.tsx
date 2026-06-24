@@ -1,8 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Message, WorkspaceState, ViralScores, FileAttachment } from '@/lib/types';
-import { Session, loadSessions, saveSessions, createSession, updateSession, deleteSession, getActiveSessionId, setActiveSessionId } from '@/lib/sessionStore';
+import React, { useCallback, useEffect, useState } from 'react';
 import NavSidebar from '@/components/NavSidebar';
 import ChatPanel from '@/components/ChatPanel';
 import WorkspaceSidebar from '@/components/WorkspaceSidebar';
@@ -10,301 +8,103 @@ import ProjectsView from '@/components/ProjectsView';
 import StyleGuideView from '@/components/StyleGuideView';
 import HistoryView from '@/components/HistoryView';
 import SettingsView from '@/components/SettingsView';
+import ResearchFeed from '@/components/ResearchFeed';
+import CreatorView from '@/components/CreatorView';
+import VoiceView from '@/components/VoiceView';
+import CarouselView from '@/components/CarouselView';
+import TranscribeView from '@/components/TranscribeView';
+import SearchView from '@/components/SearchView';
+import BoardsView from '@/components/BoardsView';
+import HomeView from '@/components/HomeView';
+import { NavErrorBoundary } from '@/components/NavErrorBoundary';
+import { useSessionStore } from '@/hooks/useSessionStore';
+import { useChatStore } from '@/hooks/useChatStore';
 
-const DEFAULT_WORKSPACE: WorkspaceState = {
-  model: 'qwen-latest-series-invite-beta-v34',
-  temperature: 0.7,
-  platform: 'twitter',
-  format: 'post',
-  length: 'medium',
-  tone: 'casual',
-};
-
+// ─── Main Page ──────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [activeSessionId, setActiveSession] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [workspace, setWorkspace] = useState<WorkspaceState>(DEFAULT_WORKSPACE);
-  const [isLoading, setIsLoading] = useState(false);
-  const [latestScores, setLatestScores] = useState<ViralScores | null>(null);
   const [activeNav, setActiveNav] = useState('home');
-  const [pendingFiles, setPendingFiles] = useState<FileAttachment[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const sessionsRef = useRef<Session[]>([]);
 
-  // Keep ref in sync with state
-  useEffect(() => { sessionsRef.current = sessions; }, [sessions]);
+  // Session & workspace state
+  const sessionStore = useSessionStore();
+  const {
+    sessions, activeSessionId, workspace,
+    persistSession, handleNewSession, handleSwitchSession,
+    handleDeleteSession, handleWorkspaceChange, setLatestScores: setSessionScores,
+  } = sessionStore;
 
-  // Load sessions on mount
-  useEffect(() => {
-    const loaded = loadSessions();
-    const activeId = getActiveSessionId();
-    if (loaded.length > 0) {
-      setSessions(loaded);
-      const active = activeId ? loaded.find(s => s.id === activeId) : loaded[0];
-      if (active) {
-        setActiveSession(active.id);
-        setMessages(active.messages || []);
-        if (active.workspace) setWorkspace(active.workspace);
-      }
-    }
-  }, []);
+  // Chat state
+  const chatStore = useChatStore({
+    activeSessionId,
+    workspace,
+    onNewSession: handleNewSession,
+    persistSession,
+  });
+  const {
+    messages, setMessages, isLoading, latestScores,
+    pendingFiles, pendingTemplate, streamingContent, fileInputRef,
+    handleFileSelect, removeFile, sendMessage, handleAction,
+    handleRetry, insertTemplate, consumeTemplate,
+  } = chatStore;
 
-  // Persist session to localStorage
-  const persistSession = useCallback((sessionId: string, updatedMessages: Message[], ws?: WorkspaceState) => {
-    setSessions(prev => {
-      const title = updatedMessages.find(m => m.role === 'user')?.content.slice(0, 60) || 'New Session';
-      const existing = prev.find(s => s.id === sessionId);
-      const currentTitle = existing?.title;
-      const finalTitle = (!currentTitle || currentTitle === 'New Session') ? title : currentTitle;
-      const updated = prev.map(s =>
-        s.id === sessionId
-          ? { ...s, messages: updatedMessages, workspace: ws || workspace, title: finalTitle, updatedAt: Date.now() }
-          : s
-      );
-      saveSessions(updated);
-      return updated;
-    });
-  }, [workspace]);
+  // Wire session switching → chat messages
+  const onSwitchSession = useCallback((sessionId: string) => {
+    const msgs = handleSwitchSession(sessionId);
+    if (msgs) setMessages(msgs);
+    setLatestScores(null);
+    setActiveNav('agents');
+  }, [handleSwitchSession, setMessages]);
 
-  const handleNewSession = useCallback(() => {
-    const newSession = createSession();
-    setSessions(prev => {
-      const updated = [newSession, ...prev];
-      saveSessions(updated);
-      return updated;
-    });
-    setActiveSession(newSession.id);
-    setActiveSessionId(newSession.id);
+  const onDeleteSession = useCallback((sessionId: string) => {
+    const result = handleDeleteSession(sessionId, activeSessionId);
+    if (result) setMessages(result.messages);
+  }, [handleDeleteSession, activeSessionId, setMessages]);
+
+  const onNewSession = useCallback(() => {
+    handleNewSession();
     setMessages([]);
-    setWorkspace(DEFAULT_WORKSPACE);
     setLatestScores(null);
-    setPendingFiles([]);
     setActiveNav('agents');
-  }, []);
-
-  const handleSwitchSession = useCallback((sessionId: string) => {
-    const session = sessionsRef.current.find(s => s.id === sessionId);
-    if (!session) return;
-    setActiveSession(sessionId);
-    setActiveSessionId(sessionId);
-    setMessages(session.messages || []);
-    if (session.workspace) setWorkspace(session.workspace);
-    else setWorkspace(DEFAULT_WORKSPACE);
-    setLatestScores(null);
-    setPendingFiles([]);
-    setActiveNav('agents');
-  }, []);
-
-  const handleDeleteSession = useCallback((sessionId: string) => {
-    setSessions(prev => {
-      const updated = prev.filter(s => s.id !== sessionId);
-      saveSessions(updated);
-      return updated;
-    });
-    if (activeSessionId === sessionId) {
-      const remaining = sessionsRef.current.filter(s => s.id !== sessionId);
-      if (remaining.length > 0) {
-        setActiveSession(remaining[0].id);
-        setActiveSessionId(remaining[0].id);
-        setMessages(remaining[0].messages || []);
-        if (remaining[0].workspace) setWorkspace(remaining[0].workspace);
-        else setWorkspace(DEFAULT_WORKSPACE);
-      } else {
-        setActiveSession(null);
-        setMessages([]);
-        setWorkspace(DEFAULT_WORKSPACE);
-      }
-    }
-  }, [activeSessionId]);
-
-  const handleFileSelect = useCallback(async (files: FileList | null) => {
-    if (!files) return;
-    const attachments: FileAttachment[] = [];
-
-    for (const file of Array.from(files)) {
-      if (file.size > 5 * 1024 * 1024) {
-        alert(`${file.name} is too large (max 5MB)`);
-        continue;
-      }
-
-      const isImage = file.type.startsWith('image/');
-      const isText = file.type.startsWith('text/') ||
-        ['.txt', '.md', '.csv', '.json', '.yaml', '.yml', '.xml', '.html', '.css', '.js', '.ts', '.tsx', '.jsx', '.py', '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.sh', '.bash', '.zsh', '.env', '.log', '.sql'].some(ext => file.name.endsWith(ext));
-
-      if (isImage) {
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(file);
-        });
-        attachments.push({ name: file.name, type: 'image', content: dataUrl, size: file.size });
-      } else if (isText) {
-        const text = await file.text();
-        attachments.push({ name: file.name, type: 'text', content: text, size: file.size });
-      } else {
-        alert(`${file.name}: unsupported file type`);
-      }
-    }
-
-    setPendingFiles(prev => [...prev, ...attachments]);
-  }, []);
-
-  const removeFile = useCallback((index: number) => {
-    setPendingFiles(prev => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const sendMessage = useCallback(async (content: string, action?: string) => {
-    // Build message with file attachments
-    let fullContent = content;
-    const attachments = [...pendingFiles];
-
-    if (attachments.length > 0 && !action) {
-      const textFiles = attachments.filter(a => a.type === 'text');
-      if (textFiles.length > 0) {
-        const fileContext = textFiles.map(f => `[FILE: ${f.name}]\n${f.content}\n[/FILE]`).join('\n\n');
-        fullContent = `${content}\n\n---\n\n${fileContext}`;
-      }
-    }
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: fullContent,
-      timestamp: Date.now(),
-      attachments: attachments.length > 0 ? attachments : undefined,
-    };
-
-    const updatedMessages = action ? [...messages] : [...messages, userMessage];
-
-    if (!action) {
-      setMessages(updatedMessages);
-    }
-
-    // Ensure we have an active session
-    let sessionId = activeSessionId;
-    if (!sessionId) {
-      const newSession = createSession();
-      sessionId = newSession.id;
-      setActiveSession(sessionId);
-      setActiveSessionId(sessionId);
-      setSessions(prev => {
-        const updated = [newSession, ...prev];
-        saveSessions(updated);
-        return updated;
-      });
-    }
-
-    // Save user message
-    if (!action) {
-      persistSession(sessionId, updatedMessages);
-    }
-
-    setIsLoading(true);
-    setPendingFiles([]);
-
-    try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: updatedMessages.map(m => ({ role: m.role, content: m.content })),
-          workspace,
-          action,
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Request failed');
-      }
-
-      const data = await res.json();
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.content,
-        scores: data.scores || undefined,
-        research: data.research || undefined,
-        timestamp: Date.now(),
-      };
-
-      const finalMessages = [...updatedMessages, assistantMessage];
-      setMessages(finalMessages);
-      persistSession(sessionId, finalMessages);
-
-      if (data.scores) {
-        setLatestScores(data.scores);
-      }
-    } catch (error: any) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `**ERROR:** ${error.message}\n\nCheck your API key in .env.local and restart the dev server.`,
-        timestamp: Date.now(),
-      };
-      const finalMessages = [...updatedMessages, errorMessage];
-      setMessages(finalMessages);
-      persistSession(sessionId, finalMessages);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [messages, workspace, pendingFiles, activeSessionId, persistSession]);
-
-  const handleAction = useCallback((action: string) => {
-    if (messages.length === 0) return;
-    setIsLoading(true);
-    sendMessage('', action);
-  }, [messages, sendMessage]);
+  }, [handleNewSession, setMessages]);
 
   const clearChat = useCallback(() => {
-    handleNewSession();
-  }, [handleNewSession]);
+    onNewSession();
+  }, [onNewSession]);
 
-  const insertTemplate = useCallback((template: string) => {
-    const input = document.querySelector('textarea') as HTMLTextAreaElement;
-    if (input) {
-      input.focus();
-      input.value = template;
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, []);
+  const onWorkspaceChange = useCallback((ws: typeof workspace) => {
+    handleWorkspaceChange(ws, activeSessionId, messages);
+  }, [handleWorkspaceChange, activeSessionId, messages]);
+
+  const goToChatWithTemplate = useCallback((template: string) => {
+    if (activeNav !== 'agents') setActiveNav('agents');
+    insertTemplate(template);
+  }, [activeNav, insertTemplate]);
 
   // Keyboard shortcuts
   useEffect(() => {
+    const templates = [
+      'Generate 5 viral hook variations about [TOPIC]. Each hook should: create a curiosity gap, lead with the most shocking fact, use numbers not words, and be under 280 characters. Format as a numbered list.',
+      'Build a 6-post thread about [TOPIC]. Structure: 1/ Hook with shocking fact, 2/ Context and problem, 3-5/ Core insights with examples, 6/ CTA. Use short sentences, one idea per line, em dashes for pauses.',
+      'Create a listicle post: "X things about [TOPIC] that [audience] needs to know". Use numbered format (1/ 2/ 3/), each point 1-2 lines. Lead with the most valuable insight. End with a sharp closer.',
+      'Generate 3 strategic reply angles to a viral tweet about [TOPIC]: (1) Value Add - expand with unique data, (2) Respectful Contrarian - disagree with evidence, (3) Synthesizer - condense into punchy bullets. Each reply 1-3 sentences.',
+      'Create 5 high-converting call-to-action variations for [PRODUCT/SERVICE]. Use urgency, social proof, and clear benefits. Format: direct, question-based, FOMO-driven, value-first, and contrarian. Each under 100 characters.',
+      'Write a post that connects [TRENDING TOPIC] to [YOUR NICHE]. Formula: reference the trend → pivot to your angle → deliver unexpected insight → close with provocative statement. Make it feel timely but evergreen.',
+    ];
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key >= '1' && e.key <= '6') {
         e.preventDefault();
-        const templateIndex = parseInt(e.key) - 1;
-        const templates = [
-          'Generate 5 viral hook variations about [TOPIC]. Each hook should: create a curiosity gap, lead with the most shocking fact, use numbers not words, and be under 280 characters. Format as a numbered list.',
-          'Build a 6-post thread about [TOPIC]. Structure: 1/ Hook with shocking fact, 2/ Context and problem, 3-5/ Core insights with examples, 6/ CTA. Use short sentences, one idea per line, em dashes for pauses.',
-          'Create a listicle post: "X things about [TOPIC] that [audience] needs to know". Use numbered format (1/ 2/ 3/), each point 1-2 lines. Lead with the most valuable insight. End with a sharp closer.',
-          'Generate 3 strategic reply angles to a viral tweet about [TOPIC]: (1) Value Add - expand with unique data, (2) Respectful Contrarian - disagree with evidence, (3) Synthesizer - condense into punchy bullets. Each reply 1-3 sentences.',
-          'Create 5 high-converting call-to-action variations for [PRODUCT/SERVICE]. Use urgency, social proof, and clear benefits. Format: direct, question-based, FOMO-driven, value-first, and contrarian. Each under 100 characters.',
-          'Write a post that connects [TRENDING TOPIC] to [YOUR NICHE]. Formula: reference the trend → pivot to your angle → deliver unexpected insight → close with provocative statement. Make it feel timely but evergreen.',
-        ];
-        if (templates[templateIndex]) {
-          insertTemplate(templates[templateIndex]);
-        }
+        const idx = parseInt(e.key) - 1;
+        if (templates[idx]) goToChatWithTemplate(templates[idx]);
       }
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault();
-        handleNewSession();
+        onNewSession();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [insertTemplate, handleNewSession]);
-
-  const handleWorkspaceChange = useCallback((ws: WorkspaceState) => {
-    setWorkspace(ws);
-    if (activeSessionId) {
-      persistSession(activeSessionId, messages, ws);
-    }
-  }, [activeSessionId, messages, persistSession]);
+  }, [goToChatWithTemplate, onNewSession]);
 
   const renderMainContent = () => {
     switch (activeNav) {
@@ -317,19 +117,23 @@ export default function Home() {
               isLoading={isLoading}
               onSendMessage={sendMessage}
               onAction={handleAction}
+              onRetry={handleRetry}
               onFileSelect={handleFileSelect}
               onRemoveFile={removeFile}
               pendingFiles={pendingFiles}
+              pendingTemplate={pendingTemplate}
+              onTemplateConsumed={consumeTemplate}
               fileInputRef={fileInputRef}
               sessions={sessions}
               activeSessionId={activeSessionId}
-              onNewSession={handleNewSession}
-              onSwitchSession={handleSwitchSession}
-              onDeleteSession={handleDeleteSession}
+              onNewSession={onNewSession}
+              onSwitchSession={onSwitchSession}
+              onDeleteSession={onDeleteSession}
+              streamingContent={streamingContent}
             />
             <WorkspaceSidebar
               workspace={workspace}
-              onWorkspaceChange={handleWorkspaceChange}
+              onWorkspaceChange={onWorkspaceChange}
               scores={latestScores}
               onAction={handleAction}
               onInsertTemplate={insertTemplate}
@@ -338,28 +142,30 @@ export default function Home() {
           </>
         );
       case 'projects':
-        return (
-          <ProjectsView
-            sessions={sessions}
-            onSwitchSession={handleSwitchSession}
-            onNewSession={handleNewSession}
-          />
-        );
+        return <ProjectsView sessions={sessions} onSwitchSession={onSwitchSession} onNewSession={onNewSession} />;
       case 'style':
         return <StyleGuideView />;
       case 'history':
-        return (
-          <HistoryView
-            sessions={sessions}
-            onSwitchSession={handleSwitchSession}
-            onDeleteSession={handleDeleteSession}
-          />
-        );
+        return <HistoryView sessions={sessions} onSwitchSession={onSwitchSession} onDeleteSession={onDeleteSession} />;
       case 'settings':
         return <SettingsView />;
+      case 'research':
+        return <ResearchFeed onGenerate={(topic) => goToChatWithTemplate(`Write a thread about ${topic}. Use the outlier data to inform the angle.`)} />;
+      case 'creators':
+        return <CreatorView onGenerate={(topic) => goToChatWithTemplate(`Write about: ${topic}. Use the same energy and angle as the original post.`)} />;
+      case 'voice':
+        return <VoiceView onGenerate={(topic) => goToChatWithTemplate(topic)} onSelectVoice={(name) => { sessionStore.setWorkspace({ ...workspace, voiceProfile: name }); setActiveNav('agents'); }} />;
+      case 'carousel':
+        return <CarouselView onGenerate={(topic) => goToChatWithTemplate(topic)} />;
+      case 'transcribe':
+        return <TranscribeView onGenerate={(topic) => goToChatWithTemplate(topic)} />;
+      case 'search':
+        return <SearchView onGenerate={(topic) => goToChatWithTemplate(`Write a thread about ${topic}. Reference the outlier data and add your unique angle.`)} onSavePost={() => {}} />;
+      case 'boards':
+        return <BoardsView onGenerate={(topic) => goToChatWithTemplate(`Write about: ${topic}`)} />;
       case 'home':
       default:
-        return <HomeView onNavigate={setActiveNav} messageCount={messages.length} sessionCount={sessions.length} onNewSession={handleNewSession} />;
+        return <HomeView onNavigate={setActiveNav} messageCount={messages.length} sessionCount={sessions.length} onNewSession={onNewSession} onInsertTemplate={insertTemplate} />;
     }
   };
 
@@ -372,156 +178,10 @@ export default function Home() {
         messageCount={messages.length}
       />
       <main className="flex flex-1 overflow-hidden">
-        {renderMainContent()}
+        <NavErrorBoundary>
+          {renderMainContent()}
+        </NavErrorBoundary>
       </main>
-    </div>
-  );
-}
-
-// ===== HOME DASHBOARD =====
-function HomeView({ onNavigate, messageCount, sessionCount, onNewSession }: { onNavigate: (nav: string) => void; messageCount: number; sessionCount: number; onNewSession: () => void }) {
-  const cards = [
-    {
-      id: 'agents',
-      icon: '⚡',
-      title: 'Content Engine',
-      desc: 'Generate viral posts, threads, hooks, and reply angles with multi-model AI.',
-      badge: messageCount > 0 ? `${messageCount} msgs` : null,
-    },
-    {
-      id: 'projects',
-      icon: '📁',
-      title: 'Projects',
-      desc: 'Organize content campaigns, track drafts, and manage publishing status.',
-      badge: null,
-    },
-    {
-      id: 'style',
-      icon: '🎨',
-      title: 'Style Guide',
-      desc: 'Your writing rules, tone engine, hook formulas, and content pillars.',
-      badge: null,
-    },
-    {
-      id: 'history',
-      icon: '📜',
-      title: 'History',
-      desc: 'Browse past conversations, search outputs, and reuse generated content.',
-      badge: sessionCount > 0 ? `${sessionCount} sessions` : null,
-    },
-    {
-      id: 'settings',
-      icon: '⚙',
-      title: 'Settings',
-      desc: 'API keys, model configuration, defaults, and preferences.',
-      badge: null,
-    },
-  ];
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden" style={{ background: 'var(--bg-primary)' }}>
-      <div className="flex items-center justify-between px-6 py-4 border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg-secondary)' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-2 h-2 rounded-full pulse-green" style={{ background: 'var(--accent)' }} />
-          <span className="text-sm font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
-            StraughterG OS
-          </span>
-          <span className="text-[10px] px-2 py-0.5 rounded" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
-            v1.0
-          </span>
-        </div>
-        <button
-          onClick={onNewSession}
-          className="px-4 py-2 rounded text-[11px] font-bold uppercase tracking-wider transition-all"
-          style={{ background: 'var(--accent)', color: '#000', border: 'none' }}
-        >
-          + New Session
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-6 py-8">
-        <div className="max-w-3xl mx-auto">
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--text-primary)' }}>
-              StraughterG OS
-            </h1>
-            <p className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
-              AI content engine built by a systems engineer, for systems engineers.
-            </p>
-            <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>
-              not a chatbot — a system.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {cards.map(card => (
-              <button
-                key={card.id}
-                onClick={() => onNavigate(card.id)}
-                className="text-left p-5 rounded-lg transition-all"
-                style={{
-                  background: 'var(--bg-secondary)',
-                  border: '1px solid var(--border)',
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.borderColor = 'var(--accent-dim)';
-                  e.currentTarget.style.transform = 'translateY(-1px)';
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.borderColor = 'var(--border)';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <span className="text-2xl">{card.icon}</span>
-                  {card.badge && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded" style={{
-                      background: 'var(--accent-dim)', color: 'var(--accent)',
-                    }}>
-                      {card.badge}
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-[13px] font-bold mb-1" style={{ color: 'var(--text-primary)' }}>
-                  {card.title}
-                </h3>
-                <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-muted)' }}>
-                  {card.desc}
-                </p>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-6 p-4 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
-            <h3 className="text-[11px] font-bold uppercase tracking-widest mb-3" style={{ color: 'var(--text-muted)' }}>
-              Quick Start
-            </h3>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { label: 'Generate hooks about AI agents', nav: 'agents' },
-                { label: 'Write a thread about VAOS', nav: 'agents' },
-                { label: 'Create a new project', nav: 'projects' },
-                { label: 'Review your style guide', nav: 'style' },
-              ].map((item, i) => (
-                <button
-                  key={i}
-                  onClick={() => onNavigate(item.nav)}
-                  className="text-left px-3 py-2 rounded text-[11px] transition-all"
-                  style={{
-                    background: 'var(--bg-tertiary)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-secondary)',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent-dim)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

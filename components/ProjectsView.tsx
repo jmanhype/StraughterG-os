@@ -58,7 +58,7 @@ export default function ProjectsView({ sessions, onSwitchSession, onNewSession }
   const createProject = () => {
     if (!newName.trim()) return;
     const project: Project = {
-      id: Date.now().toString(),
+      id: crypto.randomUUID(),
       name: newName.trim(),
       platform: newPlatform,
       format: newFormat,

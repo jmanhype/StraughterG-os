@@ -40,7 +40,7 @@ export function setActiveSessionId(id: string) {
 
 export function createSession(): Session {
   return {
-    id: Date.now().toString(),
+    id: crypto.randomUUID(),
     title: 'New Session',
     messages: [],
     workspace: null,

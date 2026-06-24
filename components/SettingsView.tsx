@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 
 interface Settings {
   aiApiKey: string;
@@ -41,10 +41,12 @@ function maskKey(key: string): string {
   return key.slice(0, 4) + '••••••••' + key.slice(-4);
 }
 
-export default function SettingsView() {
+function SettingsView() {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState(false);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [testError, setTestError] = useState('');
 
   useEffect(() => {
     setSettings(loadSettings());
@@ -56,6 +58,36 @@ export default function SettingsView() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  };
+
+  const testConnection = async () => {
+    setTestStatus('testing');
+    setTestError('');
+    try {
+      // Send a minimal chat request to verify the API key works
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: 'Reply with just the word OK' }],
+          workspace: { model: settings.aiModel || 'qwen-latest-series-invite-beta-v34' },
+          apiOverrides: {
+            ...(settings.aiApiKey ? { apiKey: settings.aiApiKey } : {}),
+            ...(settings.aiBaseUrl ? { baseUrl: settings.aiBaseUrl } : {}),
+          },
+        }),
+      });
+      if (res.ok) {
+        setTestStatus('ok');
+      } else {
+        const data = await res.json().catch(() => ({ error: 'Unknown error' }));
+        setTestStatus('error');
+        setTestError(data.error || `HTTP ${res.status}`);
+      }
+    } catch (e: any) {
+      setTestStatus('error');
+      setTestError(e.message || 'Connection failed');
+    }
   };
 
   const toggleShowKey = (key: string) => {
@@ -143,6 +175,28 @@ export default function SettingsView() {
                 </select>
               </div>
             </div>
+          </div>
+
+          {/* Test Connection */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={testConnection}
+              disabled={testStatus === 'testing'}
+              className="px-4 py-2 rounded text-[11px] font-bold uppercase tracking-wide transition-all"
+              style={{
+                background: testStatus === 'ok' ? '#10b981' : testStatus === 'error' ? '#ef4444' : 'var(--accent)',
+                color: '#fff',
+                opacity: testStatus === 'testing' ? 0.6 : 1,
+              }}
+            >
+              {testStatus === 'testing' ? 'Testing...' : testStatus === 'ok' ? '✓ Connected' : testStatus === 'error' ? '✗ Failed' : 'Test Connection'}
+            </button>
+            {testStatus === 'error' && testError && (
+              <span className="text-[10px]" style={{ color: '#ef4444' }}>{testError}</span>
+            )}
+            {testStatus === 'ok' && (
+              <span className="text-[10px]" style={{ color: '#10b981' }}>API key and endpoint are working.</span>
+            )}
           </div>
 
           {/* Z.AI / ZhiPu */}
@@ -261,3 +315,5 @@ export default function SettingsView() {
     </div>
   );
 }
+
+export default memo(SettingsView);

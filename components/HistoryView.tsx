@@ -13,10 +13,12 @@ export default function HistoryView({ sessions, onSwitchSession, onDeleteSession
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtered = sessions.filter(s =>
-    s.title.toLowerCase().includes(search.toLowerCase()) ||
-    s.messages.some(m => m.content.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = sessions.filter(s => {
+    // Hide empty sessions with no messages
+    if (s.messages.length === 0) return false;
+    return s.title.toLowerCase().includes(search.toLowerCase()) ||
+      s.messages.some(m => m.content.toLowerCase().includes(search.toLowerCase()));
+  });
 
   const clearAll = () => {
     if (confirm('Delete all sessions? This cannot be undone.')) {

@@ -28,11 +28,16 @@ async function callMCP(method: string, params: any, sessionId?: string): Promise
   };
   if (sessionId) headers['Mcp-Session-Id'] = sessionId;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   const res = await fetch(MCP_ENDPOINT, {
     method: 'POST',
     headers,
     body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
+    signal: controller.signal,
   });
+  clearTimeout(timeout);
 
   if (!res.ok) {
     const text = await res.text();
@@ -62,8 +67,6 @@ export async function researchTopic(topic: string): Promise<ResearchResult> {
   }
 
   try {
-    console.log('🌐 Initializing Z.AI Web Search MCP session...');
-
     // Step 1: Initialize MCP session
     const init = await callMCP('initialize', {
       protocolVersion: '2024-11-05',
@@ -73,7 +76,6 @@ export async function researchTopic(topic: string): Promise<ResearchResult> {
 
     const sessionId = init.sessionId;
     if (!sessionId) throw new Error('No session ID returned from MCP init');
-    console.log('✅ MCP session initialized:', sessionId);
 
     // Step 2: Send initialized notification (fire and forget)
     const notifyHeaders: Record<string, string> = {
@@ -93,7 +95,6 @@ export async function researchTopic(topic: string): Promise<ResearchResult> {
     });
 
     // Step 3: Call web_search_prime
-    console.log('🔬 Searching for:', topic.substring(0, 100));
     const searchResult = await callMCP(
       'tools/call',
       {
@@ -110,7 +111,6 @@ export async function researchTopic(topic: string): Promise<ResearchResult> {
 
     // Step 4: Parse results from MCP response
     const results = parseMCPResults(searchResult.data);
-    console.log('✅ Search complete:', results.length, 'results found');
 
     if (results.length === 0) {
       return {

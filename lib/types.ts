@@ -16,6 +16,8 @@ export interface Message {
     sources: string[];
     facts: Array<{ claim: string; source: string }>;
   };
+  errorType?: 'network' | 'rate_limit' | 'auth' | 'server' | 'unknown';
+  retryable?: boolean;
 }
 
 export interface ViralScores {
@@ -35,10 +37,16 @@ export interface WorkspaceState {
   format: 'post' | 'thread' | 'article' | 'reply' | 'hook';
   length: 'short' | 'medium' | 'long';
   tone: 'professional' | 'casual' | 'bold' | 'witty' | 'empathetic' | 'technical';
+  voiceProfile?: string;
 }
 
 export interface ChatRequest {
   messages: { role: string; content: string }[];
   workspace: WorkspaceState;
   action?: string;
+  apiOverrides?: {
+    apiKey?: string;
+    baseUrl?: string;
+    model?: string;
+  };
 }

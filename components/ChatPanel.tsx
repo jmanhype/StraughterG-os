@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { Message, FileAttachment } from '@/lib/types';
 import { Session } from '@/lib/sessionStore';
 
@@ -9,31 +9,39 @@ interface ChatPanelProps {
   isLoading: boolean;
   onSendMessage: (content: string) => void;
   onAction?: (action: string) => void;
+  onRetry?: () => void;
   onFileSelect?: (files: FileList | null) => void;
   onRemoveFile?: (index: number) => void;
   pendingFiles?: FileAttachment[];
-  fileInputRef?: React.RefObject<HTMLInputElement>;
+  pendingTemplate?: string | null;
+  onTemplateConsumed?: () => void;
+  fileInputRef?: React.RefObject<HTMLInputElement | null>;
   sessions?: Session[];
   activeSessionId?: string | null;
   onNewSession?: () => void;
   onSwitchSession?: (sessionId: string) => void;
   onDeleteSession?: (sessionId: string) => void;
+  streamingContent?: string;
 }
 
-export default function ChatPanel({
+function ChatPanel({
   messages,
   isLoading,
   onSendMessage,
   onAction,
+  onRetry,
   onFileSelect,
   onRemoveFile,
   pendingFiles = [],
+  pendingTemplate,
+  onTemplateConsumed,
   fileInputRef,
   sessions = [],
   activeSessionId,
   onNewSession,
   onSwitchSession,
   onDeleteSession,
+  streamingContent = '',
 }: ChatPanelProps) {
   const [input, setInput] = useState('');
   const [showSessions, setShowSessions] = useState(false);
@@ -50,6 +58,15 @@ export default function ChatPanel({
       textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px';
     }
   }, [input]);
+
+  // Consume pending template from parent (replaces fragile DOM hack)
+  useEffect(() => {
+    if (pendingTemplate) {
+      setInput(pendingTemplate);
+      textareaRef.current?.focus();
+      onTemplateConsumed?.();
+    }
+  }, [pendingTemplate, onTemplateConsumed]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -262,6 +279,26 @@ export default function ChatPanel({
                 {renderCodeBlocks(msg.content)}
               </div>
 
+              {/* Retry Button for retryable errors */}
+              {msg.role === 'assistant' && msg.retryable && onRetry && (
+                <button
+                  onClick={onRetry}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all"
+                  style={{
+                    background: 'var(--bg-tertiary)',
+                    border: '1px solid var(--accent-dim)',
+                    color: 'var(--accent)',
+                    cursor: isLoading ? 'not-allowed' : 'pointer',
+                    opacity: isLoading ? 0.5 : 1,
+                  }}
+                  onMouseEnter={e => { if (!isLoading) { e.currentTarget.style.background = 'var(--accent)'; e.currentTarget.style.color = '#000'; }}}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'var(--bg-tertiary)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                >
+                  🔄 Retry
+                </button>
+              )}
+
               {/* Story Metrics */}
               {msg.role === 'assistant' && msg.scores && (
                 <div className="p-3 rounded-lg" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
@@ -372,6 +409,23 @@ export default function ChatPanel({
             </div>
           </div>
         )}
+        {/* SSE streaming bubble — shows tokens as they arrive */}
+        {streamingContent && (
+          <div className="flex gap-3 px-4 py-3">
+            <div className="w-6 h-6 rounded flex-shrink-0 flex items-center justify-center text-xs" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>
+              SG
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>
+                streaming...
+              </div>
+              <div className="text-[13px] leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-primary)' }}>
+                {streamingContent}
+                <span className="inline-block w-1.5 h-4 ml-0.5 align-middle animate-pulse" style={{ background: 'var(--accent)' }} />
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -465,3 +519,5 @@ export default function ChatPanel({
     </div>
   );
 }
+
+export default memo(ChatPanel);

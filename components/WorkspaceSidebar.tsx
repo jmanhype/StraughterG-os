@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { WorkspaceState, ViralScores } from '@/lib/types';
 
 interface WorkspaceSidebarProps {
@@ -47,7 +47,7 @@ function ScoreGauge({ label, value, color }: { label: string; value: number; col
 }
 
 
-export default function WorkspaceSidebar({
+function WorkspaceSidebar({
   workspace,
   onWorkspaceChange,
   scores,
@@ -286,3 +286,5 @@ export default function WorkspaceSidebar({
     </aside>
   );
 }
+
+export default memo(WorkspaceSidebar);
