@@ -70,6 +70,16 @@ const HOOK_COLORS: Record<string, string> = {
   announcement: '#ec4899',
 };
 
+interface FeedbackStats {
+  total_published: number;
+  with_performance_data: number;
+  tier_distribution: Record<string, number>;
+  avg_engagement_rate: number;
+  best_variant_types: Array<{ variant_type: string; avg_rate: number; cnt: number }>;
+  top_performers: Array<Record<string, unknown>>;
+  current_weights: Record<string, { weight: number; confidence: number }>;
+}
+
 function scoreColor(score: number): string {
   if (score >= 70) return '#10b981';
   if (score >= 50) return '#f59e0b';
@@ -137,7 +147,7 @@ const StatsBar = memo(({ stats, onRefresh }: { stats: PipelineStats | null; onRe
 ));
 StatsBar.displayName = 'StatsBar';
 
-const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCopy, onRegenerate, onGenerate }: {
+const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCopy, onRegenerate, onPublish, onGenerate }: {
   opp: Opportunity;
   expanded: boolean;
   onToggle: () => void;
@@ -147,6 +157,7 @@ const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCo
   onRegenerate: () => void;
   onPublish: () => void;
   onGenerate: (prompt: string) => void;
+}) => {
 }) => {
   const breakdown = parseBreakdown(opp.score_breakdown);
   const icon = FORMAT_ICONS[opp.variant_type] || '📄';
