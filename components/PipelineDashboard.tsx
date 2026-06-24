@@ -147,7 +147,7 @@ const StatsBar = memo(({ stats, onRefresh }: { stats: PipelineStats | null; onRe
 ));
 StatsBar.displayName = 'StatsBar';
 
-const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCopy, onRegenerate, onPublish, onGenerate }: {
+const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCopy, onRegenerate, onPublish, onGenerate, onExport }: {
   opp: Opportunity;
   expanded: boolean;
   onToggle: () => void;
@@ -157,6 +157,7 @@ const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCo
   onRegenerate: () => void;
   onPublish: () => void;
   onGenerate: (prompt: string) => void;
+  onExport: (platform: string) => void;
 }) => {
   const breakdown = parseBreakdown(opp.score_breakdown);
   const icon = FORMAT_ICONS[opp.variant_type] || '📄';
@@ -253,6 +254,20 @@ const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCo
               style={{ background: 'var(--accent)', color: '#000' }}
             >
               📋 Copy
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onExport('x'); }}
+              className="px-3 py-1.5 rounded text-[10px] font-bold transition-all"
+              style={{ background: '#1d9bf020', color: '#1d9bf0', border: '1px solid #1d9bf040' }}
+            >
+              🐦 X Thread
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onExport('linkedin'); }}
+              className="px-3 py-1.5 rounded text-[10px] font-bold transition-all"
+              style={{ background: '#0a66c220', color: '#0a66c2', border: '1px solid #0a66c240' }}
+            >
+              💼 LinkedIn
             </button>
             {!opp.published && (
               <button
@@ -642,6 +657,32 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
     } catch { /* ignore */ }
   }, []);
 
+  const exportContent = useCallback(async (oppId: number, platform: string) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/pipeline/opportunities/${oppId}/format?platform=${platform}`);
+      if (res.ok) {
+        const data = await res.json();
+        const text = data.copy_ready || '';
+        await navigator.clipboard.writeText(text);
+        setCopyStatus(oppId);
+        setTimeout(() => setCopyStatus(null), 2500);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
+  const dismissAll = useCallback(async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/pipeline/opportunities/dismiss-all?below_score=50`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        // Refresh list
+        setOpportunities(prev => prev.filter(o => o.score >= 50));
+        return data.dismissed;
+      }
+    } catch { /* ignore */ }
+    return 0;
+  }, []);
+
   const trainWeights = useCallback(async () => {
     setTraining(true);
     try {
@@ -753,6 +794,59 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
               <HookDistribution distribution={stats.hook_distribution} />
             )}
 
+            {/* Bulk actions bar */}
+            {opportunities.length > 5 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'var(--bg-tertiary)', border: '1px solid var(--border)' }}>
+                <span className="text-[9px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Bulk:</span>
+                <button
+                  onClick={dismissAll}
+                  className="px-2 py-1 rounded text-[9px] font-bold transition-all"
+                  style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440' }}
+                >
+                  🗑 Dismiss All {'<'}50
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${BACKEND_URL}/pipeline/opportunities/copy-batch?limit=3&platform=x&min_score=70`, { method: 'POST' });
+                      if (res.ok) {
+                        const data = await res.json();
+                        if (data.formatted?.length > 0) {
+                          const text = data.formatted.map((f: { title: string; copy_ready: string }) =>
+                            `--- ${f.title} ---\n${f.copy_ready}`
+                          ).join('\n\n');
+                          await navigator.clipboard.writeText(text);
+                          setCopyStatus(-1);
+                          setTimeout(() => setCopyStatus(null), 3000);
+                        }
+                      }
+                    } catch { /* ignore */ }
+                  }}
+                  className="px-2 py-1 rounded text-[9px] font-bold transition-all"
+                  style={{ background: '#1d9bf020', color: '#1d9bf0', border: '1px solid #1d9bf040' }}
+                >
+                  🐦 Copy Top 3 as X Threads
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      await fetch(`${BACKEND_URL}/pipeline/opportunities/regenerate-batch?limit=3&min_score=60&num_variants=3`, { method: 'POST' });
+                      fetchAll();
+                    } catch { /* ignore */ }
+                  }}
+                  className="px-2 py-1 rounded text-[9px] font-bold transition-all"
+                  style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+                >
+                  🔄 Regenerate Top Genomes
+                </button>
+                {copyStatus === -1 && (
+                  <span className="ml-auto text-[9px] font-bold animate-pulse" style={{ color: '#10b981' }}>
+                    ✓ 3 threads copied to clipboard
+                  </span>
+                )}
+              </div>
+            )}
+
             {opportunities.length === 0 ? (
               <div className="text-center py-16">
                 <span className="text-3xl mb-3 block">🔥</span>
@@ -778,6 +872,7 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
                   onRegenerate={() => regenerate(opp.genome_id)}
                   onPublish={() => publishOpportunity(opp)}
                   onGenerate={(p) => onGenerate?.(p)}
+                  onExport={(platform) => exportContent(opp.id, platform)}
                 />
               ))
             )}
