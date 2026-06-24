@@ -158,7 +158,6 @@ const OpportunityCard = memo(({ opp, expanded, onToggle, onView, onDismiss, onCo
   onPublish: () => void;
   onGenerate: (prompt: string) => void;
 }) => {
-}) => {
   const breakdown = parseBreakdown(opp.score_breakdown);
   const icon = FORMAT_ICONS[opp.variant_type] || '📄';
   const hookColor = HOOK_COLORS[opp.hook_type || ''] || '#6b7280';
@@ -370,6 +369,156 @@ const HookDistribution = memo(({ distribution }: { distribution: Record<string, 
 });
 HookDistribution.displayName = 'HookDistribution';
 
+const TIER_COLORS: Record<string, string> = {
+  viral: '#10b981',
+  above_avg: '#3b82f6',
+  avg: '#f59e0b',
+  below_avg: '#6b7280',
+};
+
+const FeedbackPanel = memo(({ stats, onTrain, training }: {
+  stats: FeedbackStats | null;
+  onTrain: () => void;
+  training: boolean;
+}) => {
+  if (!stats) return null;
+
+  const hasWeights = Object.keys(stats.current_weights).length > 0;
+  const weightEntries = Object.entries(stats.current_weights);
+
+  return (
+    <div className="rounded-lg p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+      {/* Header */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-lg">🧠</span>
+        <h3 className="text-[11px] font-bold uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>
+          Adaptive Intelligence
+        </h3>
+        <span
+          className="text-[8px] px-2 py-0.5 rounded-full font-bold ml-auto"
+          style={{
+            background: hasWeights ? '#10b98120' : '#f59e0b20',
+            color: hasWeights ? '#10b981' : '#f59e0b',
+          }}
+        >
+          {hasWeights ? 'TRAINED' : 'LEARNING'}
+        </span>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="text-center p-2 rounded" style={{ background: 'var(--bg-tertiary)' }}>
+          <div className="text-[16px] font-black" style={{ color: 'var(--accent)' }}>{stats.total_published}</div>
+          <div className="text-[8px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Published</div>
+        </div>
+        <div className="text-center p-2 rounded" style={{ background: 'var(--bg-tertiary)' }}>
+          <div className="text-[16px] font-black" style={{ color: 'var(--text-primary)' }}>{stats.with_performance_data}</div>
+          <div className="text-[8px] mt-0.5" style={{ color: 'var(--text-muted)' }}>With Metrics</div>
+        </div>
+        <div className="text-center p-2 rounded" style={{ background: 'var(--bg-tertiary)' }}>
+          <div className="text-[16px] font-black" style={{ color: stats.avg_engagement_rate >= 3 ? '#10b981' : '#f59e0b' }}>
+            {stats.avg_engagement_rate.toFixed(1)}%
+          </div>
+          <div className="text-[8px] mt-0.5" style={{ color: 'var(--text-muted)' }}>Avg Engagement</div>
+        </div>
+      </div>
+
+      {/* Tier distribution */}
+      {Object.keys(stats.tier_distribution).length > 0 && (
+        <div className="mb-4">
+          <h4 className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
+            Performance Tiers
+          </h4>
+          <div className="flex items-center gap-2">
+            {Object.entries(stats.tier_distribution).map(([tier, count]) => (
+              <div key={tier} className="flex items-center gap-1">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ background: TIER_COLORS[tier] || '#6b7280' }}
+                />
+                <span className="text-[9px] capitalize" style={{ color: 'var(--text-muted)' }}>{tier.replace('_', ' ')}</span>
+                <span className="text-[9px] font-bold" style={{ color: 'var(--text-secondary)' }}>{count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Trained weights */}
+      {hasWeights && (
+        <div className="mb-4">
+          <h4 className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
+            Active Scorer Weights
+          </h4>
+          <div className="flex flex-col gap-1.5">
+            {weightEntries.map(([name, data]) => (
+              <div key={name} className="flex items-center gap-2">
+                <span className="text-[9px] w-24 truncate capitalize" style={{ color: 'var(--text-muted)' }}>{name.replace('_', ' ')}</span>
+                <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: 'var(--bg-tertiary)' }}>
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${data.weight * 100}%`,
+                      background: name === 'engagement' ? '#3b82f6' : name === 'structure' ? '#8b5cf6' : '#10b981',
+                    }}
+                  />
+                </div>
+                <span className="text-[9px] font-bold w-10 text-right" style={{ color: 'var(--text-secondary)' }}>
+                  {(data.weight * 100).toFixed(0)}%
+                </span>
+              </div>
+            ))}
+          </div>
+          {weightEntries.some(([, d]) => d.confidence > 0) && (
+            <div className="mt-2 text-[8px]" style={{ color: 'var(--text-muted)' }}>
+              Confidence: {Math.max(...weightEntries.map(([, d]) => d.confidence)).toFixed(0)}%
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Best variant types */}
+      {stats.best_variant_types.length > 0 && (
+        <div className="mb-4">
+          <h4 className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
+            Best Formats
+          </h4>
+          <div className="flex gap-2">
+            {stats.best_variant_types.slice(0, 3).map(vt => (
+              <span key={vt.variant_type} className="text-[9px] px-2 py-1 rounded" style={{ background: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+                {FORMAT_ICONS[vt.variant_type] || '📄'} {vt.variant_type} <strong>{vt.avg_rate.toFixed(1)}%</strong>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Train button */}
+      <div className="flex items-center gap-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+        <button
+          onClick={onTrain}
+          disabled={training || stats.with_performance_data < 10}
+          className="px-3 py-1.5 rounded text-[10px] font-bold transition-all"
+          style={{
+            background: training ? 'var(--bg-tertiary)' : 'var(--accent)',
+            color: training ? 'var(--text-muted)' : '#000',
+            cursor: training || stats.with_performance_data < 10 ? 'not-allowed' : 'pointer',
+            opacity: stats.with_performance_data < 10 ? 0.5 : 1,
+          }}
+        >
+          {training ? '⏳ Training...' : hasWeights ? '🔄 Retrain Weights' : '🧠 Train Scorer'}
+        </button>
+        <span className="text-[9px]" style={{ color: 'var(--text-muted)' }}>
+          {stats.with_performance_data < 10
+            ? `Need ${10 - stats.with_performance_data} more performance records`
+            : `${stats.with_performance_data} records available`}
+        </span>
+      </div>
+    </div>
+  );
+});
+FeedbackPanel.displayName = 'FeedbackPanel';
+
 // ─── Main Component ────────────────────────────────────────────────────────
 
 export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps) {
@@ -379,11 +528,13 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<'opportunities' | 'genomes'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'opportunities' | 'genomes' | 'feedback'>('opportunities');
   const [filter, setFilter] = useState<'unseen' | 'all'>('unseen');
   const [copyStatus, setCopyStatus] = useState<number | null>(null);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [error, setError] = useState<string | null>(null);
+  const [feedbackStats, setFeedbackStats] = useState<FeedbackStats | null>(null);
+  const [training, setTraining] = useState(false);
 
   // ─── Data Fetching ────────────────────────────────────────────────────
 
@@ -402,10 +553,11 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
     setLoading(true);
     setError(null);
     try {
-      const [statsRes, oppsRes, genomesRes] = await Promise.all([
+      const [statsRes, oppsRes, genomesRes, feedbackRes] = await Promise.all([
         fetch(`${BACKEND_URL}/pipeline/stats`),
         fetch(`${BACKEND_URL}/pipeline/opportunities?limit=50&unseen_only=${filter === 'unseen'}`),
         fetch(`${BACKEND_URL}/pipeline/genomes?limit=20`),
+        fetch(`${BACKEND_URL}/feedback/stats`),
       ]);
       if (statsRes.ok) setStats(await statsRes.json());
       if (oppsRes.ok) {
@@ -416,6 +568,7 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
         const data = await genomesRes.json();
         setGenomes(data.genomes || []);
       }
+      if (feedbackRes.ok) setFeedbackStats(await feedbackRes.json());
     } catch (e) {
       setError('Failed to fetch pipeline data');
     } finally {
@@ -489,6 +642,23 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
     } catch { /* ignore */ }
   }, []);
 
+  const trainWeights = useCallback(async () => {
+    setTraining(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/feedback/train`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'trained') {
+          // Refresh feedback stats to show new weights
+          const statsRes = await fetch(`${BACKEND_URL}/feedback/stats`);
+          if (statsRes.ok) setFeedbackStats(await statsRes.json());
+        }
+      }
+    } catch { /* ignore */ } finally {
+      setTraining(false);
+    }
+  }, []);
+
   // ─── Render ───────────────────────────────────────────────────────────
 
   if (backendStatus === 'offline') {
@@ -517,7 +687,7 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
         <div className="flex items-center gap-3 mb-4">
           {/* Tabs */}
           <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-            {(['opportunities', 'genomes'] as const).map(tab => (
+            {(['opportunities', 'genomes', 'feedback'] as const).map(tab => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -527,7 +697,7 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
                   color: activeTab === tab ? 'var(--accent)' : 'var(--text-muted)',
                 }}
               >
-                {tab === 'opportunities' ? `🔥 Drafts (${opportunities.length})` : `🧬 Genomes (${genomes.length})`}
+                {tab === 'opportunities' ? `🔥 Drafts (${opportunities.length})` : tab === 'genomes' ? `🧬 Genomes (${genomes.length})` : `🧠 Adaptive`}
               </button>
             ))}
           </div>
@@ -622,6 +792,45 @@ export default function PipelineDashboard({ onGenerate }: PipelineDashboardProps
               </div>
             ) : (
               genomes.map(g => <GenomeCard key={g.post_id} genome={g} />)
+            )}
+          </div>
+        )}
+        {activeTab === 'feedback' && (
+          <div className="flex flex-col gap-4">
+            <FeedbackPanel stats={feedbackStats} onTrain={trainWeights} training={training} />
+            {feedbackStats && feedbackStats.top_performers.length > 0 && (
+              <div className="rounded-lg p-4" style={{ background: 'var(--bg-secondary)', border: '1px solid var(--border)' }}>
+                <h3 className="text-[10px] font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--text-muted)' }}>
+                  Top Performers
+                </h3>
+                <div className="flex flex-col gap-2">
+                  {feedbackStats.top_performers.slice(0, 5).map((p, i) => (
+                    <div key={i} className="flex items-center gap-3 text-[10px] p-2 rounded" style={{ background: 'var(--bg-tertiary)' }}>
+                      <span className="font-bold w-6" style={{ color: 'var(--text-muted)' }}>#{i + 1}</span>
+                      <span className="flex-1 truncate" style={{ color: 'var(--text-primary)' }}>{String(p.genome_id || '')}</span>
+                      <span className="px-2 py-0.5 rounded text-[8px] font-bold" style={{
+                        background: `${TIER_COLORS[String(p.performance_tier || '')] || '#6b7280'}20`,
+                        color: TIER_COLORS[String(p.performance_tier || '')] || '#6b7280',
+                      }}>
+                        {String(p.performance_tier || '').replace('_', ' ')}
+                      </span>
+                      <span className="font-bold" style={{ color: 'var(--accent)' }}>
+                        {Number(p.engagement_rate || 0).toFixed(1)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {feedbackStats && feedbackStats.total_published === 0 && (
+              <div className="text-center py-12">
+                <span className="text-3xl mb-3 block">🧠</span>
+                <p className="text-[12px] font-bold" style={{ color: 'var(--text-secondary)' }}>No feedback yet</p>
+                <p className="text-[10px] mt-1 max-w-xs mx-auto" style={{ color: 'var(--text-muted)' }}>
+                  Mark opportunities as &quot;Published&quot; to start tracking performance.
+                  After 10 published posts, the system auto-trains scoring weights.
+                </p>
+              </div>
             )}
           </div>
         )}
